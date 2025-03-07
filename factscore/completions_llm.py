@@ -17,25 +17,31 @@ class CompletionsLLM(object):
     async def generate(self, prompts: list, sample_idx=0):
         assert isinstance(prompts, list), "prompts to the model must be list"
         prompts = [p.strip() for p in prompts]
-        non_cached_pos, out = await self.find_non_cached_generations(prompts, sample_idx)
-        if len(non_cached_pos) == 0:
-            if isinstance(out[0], list):
-                out = out[0]
-            return out
+        if len(prompts) == 0:
+            return []
+        # non_cached_pos, out = await self.find_non_cached_generations(prompts, sample_idx)
+        # if len(non_cached_pos) == 0:
+        #     if isinstance(out[0], list):
+        #         out = out[0]
+        #     return out
 
-        prompts = [prompts[j] for j in non_cached_pos]
+        # prompts = [prompts[j] for j in non_cached_pos]
         generated = await self._generate_completions(prompts)
-        assert len(generated) == len(
-            non_cached_pos), f"Generated: {len(generated)}, Non-cached: {len(non_cached_pos)}"
-        for i, pos in enumerate(non_cached_pos):
-            out[pos] = generated[i]
-        if isinstance(out[0], list):
-            out = out[0]
-        return out
+        assert len(generated) == len(prompts), f"Generated: {len(generated)}, Propmpts: {len(prompts)}"
+        # for i, pos in enumerate(non_cached_pos):
+        #     out[pos] = generated[i]
+        if len(generated) == 0:
+            print("FAILES ANSWERS")
+            print(prompts)
+        if isinstance(generated[0], list):
+            generated = generated[0]
+        return generated
     
 
     async def _generate_completions(self, messages: list):
         assert isinstance(messages, list), "prompts to the model must be list"
+        if len(messages) == 0:
+            return []
         messages = list(map(lambda x: {"messages": [
                         {"role": "user", "content": x}], "model": self.model_name}, messages))
         results, failed_results = await process_api_requests_from_list(requests=messages,
@@ -43,8 +49,10 @@ class CompletionsLLM(object):
                                                                        api_key=os.environ["COMPLETIONS_API_KEY"],
                                                                        proxy=os.environ["COMPLETIONS_PROXY"] if os.environ["COMPLETIONS_PROXY"] != "None" else None
                                                                        )
+        if len(results) == 0:
+            print("FAILED RESULTS")
+            print(failed_results)
         return results
-
 
     async def find_non_cached_generations(self, prompts, sample_idx):
         '''

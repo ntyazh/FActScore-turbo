@@ -12,6 +12,7 @@ class FactScorer(object):
                  completions_model_name,
                  embedding_request_url="https://api.openai.com/v1/embeddings",
                  embedding_model_name="text-embedding-3-small",
+                 sentence_level=False,
                  cache_dir=".cache/factscore",
                  cost_estimate=False,
                  batch_size=4):
@@ -32,7 +33,8 @@ class FactScorer(object):
         self.cost_estimate = cost_estimate
         self.af_generator = AtomicFactGenerator(
             request_url=completions_request_url,
-            model_name=completions_model_name)
+            model_name=completions_model_name,
+            sentence_level=sentence_level)
         self.lm = CompletionsLLM(
             completions_model_name=completions_model_name,
             completions_request_url=completions_request_url)
@@ -90,26 +92,26 @@ class FactScorer(object):
             assert len(topics) == len(
                 atomic_facts), "`topics` and `atomic_facts` should have the same length"
         else:
-            atomic_facts, char_level_spans = [], []
+            atomic_facts, char_level_spans = [], dict()
             for topic, gen in zip(topics, generations):
                 facts_triplets = await self.af_generator.run(gen) # triplets of the type 
-                # (sentence, [atomic facts from the sentence], [spans of the facts])
-                generation_atomic_facts, generation_char_level_spans = [], []
+                # (sentence/passage, [atomic facts from the sentence], [spans of the facts])
+                generation_atomic_facts, generation_char_level_spans = [], dict()
                 for triplet in facts_triplets:
                     generation_atomic_facts.extend(triplet[1])
-                    generation_char_level_spans.extend(triplet[2])
+                    char_level_spans.update(dict(zip(triplet[1], triplet[2])))
                 atomic_facts.append(generation_atomic_facts)
-                char_level_spans.append(generation_char_level_spans)
+                # char_level_spans.append(generation_char_level_spans)
 
-            assert len(atomic_facts) == len(topics)
+            assert len(atomic_facts) == len(topics), f"atomic facts should have the same length as topics, got: topics {len(topics)}, atomic facts {len(atomic_facts)}"
             self.af_generator.save_cache()
 
         scores, decisions, passages = [], [], []
-        for topic, generation, facts in zip(topics, generations, atomic_facts):
+        for topic, facts in zip(topics, atomic_facts):
             if facts is None:
                 decisions.append(None)
                 continue
-            generation_decisions, generation_passages = await self._get_score(topic, facts, k=k)
+            generation_decisions, generation_passages = await self._get_score(topic, facts, char_level_spans, k=k)
             if len(generation_decisions) > 0:
                 score = np.mean([d["is_supported"] for d in generation_decisions])
                 decisions.append(generation_decisions)
@@ -117,17 +119,20 @@ class FactScorer(object):
                 scores.append(score)
 
         out = {
-            "score": np.mean(scores) if len(scores) > 0 else 0.0,
+            # "score": np.mean(scores) if len(scores) > 0 else 0.0,
             "decisions": decisions,
-            "num_facts_per_response": np.mean([len(d) for d in decisions if d is not None]),
+            # "num_facts_per_response": np.mean([len(d) for d in decisions if d is not None]),
             "scores": scores,
-            "char_level_facts_spans": char_level_spans,
             "passages": passages, # for debug, to check that the retrieved from wiki passages really contain appropriate information
         }
+        import json
+        with open("debug.json", 'a+') as f:
+            json.dump(out, f)
+            f.write('\n')
         return out
 
 
-    async def _get_score(self, topic, atomic_facts, k=2):
+    async def _get_score(self, topic, atomic_facts, char_level_spans, k=2):
         '''
         gives score for one generation
 
@@ -179,13 +184,12 @@ class FactScorer(object):
                     output, str), "output in _get_score must be string"
                 generated_answer = output.lower()
                 if "true" in generated_answer and "false" in generated_answer:
-                    is_supported = generated_answer.index(
-                        "true") > generated_answer.index("false")
+                    is_supported = generated_answer.index("true") > generated_answer.index("false")
                 elif "true" in generated_answer:
                     is_supported = True
                 elif "false" in generated_answer:
                     is_supported = False
                 else:
-                    is_supported = None
-            decisions.append({"atom": atom, "is_supported": is_supported})
+                    is_supported = False # TODO: или как??
+            decisions.append({"atom": atom, "is_supported": is_supported, "span": char_level_spans[atom]})
         return decisions, passages_for_atoms
