@@ -10,8 +10,10 @@ nltk.download("punkt")
 
 
 SENTENCE_INSTRUCT_PROMPT = """
-Task: Given the following sentence, break it into individual, independent facts with exact citations pointing to the relevant portion of the original sentence.
+Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
+Ensure that each statement is self-contained and does not rely on context from other statements. Replace all pronouns (e.g., 'he,' 'she,' 'it,' 'they') with the corresponding nouns or proper names to make the meaning clear without additional context.
 Do not change anything in the citations.
+If the passage is inadequate or doesn't contain any information, answer "No facts to extract".
 
 Example 1:
 Input Sentence: "Albert Einstein developed the theory of relativity, which revolutionized modern physics."
@@ -34,18 +36,22 @@ Output:
 - The Turing machine can be considered a model of a general-purpose computer [[the Turing machine, which can be considered a model of a general-purpose computer]]
 
 Example 4:
-Input Sentence: "The method is used in radiology, archaeology, biology, atmospheric science and other areas of science."
+Input Sentence: "<EXAMPLE 1> 
+<QUESTION>: 
+<EXAMPLE 2> 
+<EXAMPLE 3> 
+<EXAMPLE 4> 
+<EXAMPLE 5> 
+<EXAMPLE"
 Output:
-- The method is used in radiology [[The method is used in radiology]]
-- The method is used in archaeology [[archaeology]]
-- The method is used in biology [[biology]]
-- The method is used in atmospheric science [[atmospheric science]]
-- The method is used in other areas of science [[other areas of science]]
+- No facts to extract
 """
 
 PARAGRAPH_INSTRUCT_PROMPT = """
-Task: Given the following passage, break it into individual, independent facts with exact citations pointing to the relevant portion of the original passage.
+Task: Given the following passage, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
+Ensure that each statement is self-contained and does not rely on context from other statements. Replace all pronouns (e.g., 'he,' 'she,' 'it,' 'they') with the corresponding nouns or proper names to make the meaning clear without additional context.
 Do not change anything in the citations.
+If the passage is inadequate or doesn't contain any information, answer "No facts to extract".
 
 Example 1:
 Input Passage: "Turing was highly influential in the development of theoretical computer science, providing a formalisation of the concepts of algorithm and computation with the Turing machine, which can be considered a model of a general-purpose computer. During World War II, Turing worked for the Government Code and Cypher School at Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence. He led Hut 8, the section responsible for German naval cryptanalysis. Turing devised techniques for speeding the breaking of German ciphers, including improvements to the pre-war Polish bomba method, an electromechanical machine that could find settings for the Enigma machine. He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic."
@@ -54,23 +60,32 @@ Output:
 - Turing provided a formalisation of the concepts of algorithm and computation with the Turing machine [[providing a formalisation of the concepts of algorithm and computation with the Turing machine]]
 - The Turing machine can be considered a model of a general-purpose computer [[the Turing machine, which can be considered a model of a general-purpose computer]]
 - Turing worked for the Government Code and Cypher School at Bletchley Park [[Turing worked for the Government Code and Cypher School at Bletchley Park]]
-- Bletchley Park was Britain's codebreaking centre [[Bletchley Park, Britain's codebreaking centre]]
+- Bletchley Park was a Britain's codebreaking centre [[Bletchley Park, Britain's codebreaking centre]]
 - Bletchley Park produced Ultra intelligence [[Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence]]
-- Turing led Hut 8 [[He led Hut 8]
+- Turing led Hut 8 [[He led Hut 8]]
 - Hut 8 is the section responsible for German naval cryptanalysis [[Hut 8, the section responsible for German naval cryptanalysis]]
 - Turing devised techniques for speeding the breaking of German ciphers [[Turing devised techniques for speeding the breaking of German ciphers]]
 - Turing devised improvements to the pre-war Polish bomba method [[including improvements to the pre-war Polish bomba method]]
 - The pre-war Polish bomba method is an electromechanical machine that could find settings for the Enigma machine. [[the pre-war Polish bomba method, an electromechanical machine that could find settings for the Enigma machine]]
-- He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic. [[He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic.]]
+- Turing played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic. [[He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic.]]
 
 Example 2:
-Input Passage: "The method is used in radiology, archaeology, biology, atmospheric science and other areas of science."
+Centrioles are a very important part of the cell wall. They are also involved in the formation of the spindle fibers during cell division and in the formation of the centrosomes, which are involved in the formation of the nuclear envelope during mitosis.
+- Centrioles are a very important part of the cell wall [[Centrioles are a very important part of the cell wall]]
+- Centrioles are involved in the formation of the spindle fibers during cell division [[They are also involved in the formation of the spindle fibers during cell division]]
+- Centrioles involved in the formation of the centrosomes [[in the formation of the centrosomes]]
+- Centrosomes are involved in the formation of the nuclear envelope during mitosis [[centrosomes, which are involved in the formation of the nuclear envelope during mitosis]]
+
+Example 3:
+Input Sentence: "<EXAMPLE 1> 
+<QUESTION>: 
+<EXAMPLE 2> 
+<EXAMPLE 3> 
+<EXAMPLE 4> 
+<EXAMPLE 5> 
+<EXAMPLE"
 Output:
-- The method is used in radiology [[The method is used in radiology]]
-- The method is used in archaeology [[archaeology]]
-- The method is used in biology [[biology]]
-- The method is used in atmospheric science [[atmospheric science]]
-- The method is used in other areas of science [[other areas of science]]
+- No facts to extract
 """
 
 
@@ -122,7 +137,7 @@ class AtomicFactGenerator(object):
             return atoms_or_estimate
         
         atomic_facts_pairs = [] # pair (orig sentence, [list of facts from it])
-        for sentence_or_paragraph, facts in(atoms_or_estimate).items():
+        for sentence_or_paragraph, facts in atoms_or_estimate.items():
             atomic_facts_pairs.append((sentence_or_paragraph, facts))
 
         if self.fact_postprocess:
@@ -131,6 +146,9 @@ class AtomicFactGenerator(object):
 
         atomic_facts_triplets = [] # triplets of the type (sentence/passage, [atomic facts from the sentence], [spans of the facts])
         for pair in atomic_facts_pairs:
+            if len(pair[1]) == 0:
+                atomic_facts_triplets.append((pair[0], [], []))
+                continue
             facts, char_level_spans = await self.find_facts_spans(generation, pair[1])
             atomic_facts_triplets.append((pair[0], facts, char_level_spans))
         return atomic_facts_triplets
@@ -160,7 +178,10 @@ class AtomicFactGenerator(object):
         sent_to_facts = {}  # dict {sentence: facts from the sentence}
         if outputs is not None:
             for i, output in enumerate(outputs):
-                sent_to_facts[sentences[i]] = await self.text_to_facts(output)
+                if "No facts to extract" in output:
+                    sent_to_facts[sentences[i]] = []
+                else:
+                    sent_to_facts[sentences[i]] = await self.text_to_facts(output)
             return sent_to_facts
         
 

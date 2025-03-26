@@ -52,38 +52,55 @@ class EmbedRetrieval:
         return self
 
 
-    async def search(self, query, k):
+    async def search(self, queries, k):
         '''
         find k titles with the closest embedding distance to the query
+        query: either topic of the generation or atomic facts from the generation
         '''
-        assert isinstance(query, list)
-        embed, _ = await self.ef(query)
+        assert isinstance(queries, list)
+        embed, _ = await self.ef(queries)
         embed = np.array(embed)
         if len(embed.shape) == 1:
             embed = np.array(embed).reshape(1, -1)
-        distances, ids = self.index.search(np.array(embed), k)
-        ids, distances = ids[0], distances[0]
-        texts, titles = [], []
+        texts, titles = dict(), dict()
         cursor = self.connection.cursor()
-        for id in ids:
-            cursor.execute(
-                f"SELECT text, title FROM {self.table_name} WHERE id =" + (str(id + 1)))
-            id_results = cursor.fetchall()
-            id_texts, id_titles = id_results[0][0], id_results[0][1]
-            texts.append(id_texts)
-            titles.append(id_titles)
+        distances_queries, ids_queries = self.index.search(np.array(embed), k)
+        # print("DISTS", distances_queries)
+        for query, ids in zip(queries, ids_queries):
+            cur_query_texts = []
+            cur_query_titles = []
+            for id in ids:
+                cursor.execute(
+                    f"SELECT text, title FROM {self.table_name} WHERE id =" + (str(id + 1)))
+                id_results = cursor.fetchall()
+                id_texts, id_titles = id_results[0][0], id_results[0][1]
+                cur_query_texts.append(id_texts)
+                cur_query_titles.append(id_titles)
+            texts[query] = cur_query_texts
+            titles[query] = cur_query_titles
         cursor.close()
         return texts, titles
 
 
-    async def get_texts_for_title(self, topic: str, k):
+    async def get_texts_for_title(self, topic, k):
         '''
         returns the k texts closest by vector distance to the topic 
         (the distance is calculated between the topic and titles from wiki, not texts)
         '''
-        texts, titles = await self.search([topic], k)
-        results_chunks = []
-        for i, text in enumerate(texts):
-            results_chunks.extend([{"title": titles[i], "text": para}
+        is_generation_topic = False
+        if isinstance(topic, str):
+            topic = [topic]
+            is_generation_topic = True
+        texts, titles = await self.search(topic, k)
+
+        results_chunks = dict()
+        for query in texts.keys():
+            query_results_chunks = []
+            texts_, titles_ = texts[query], titles[query]
+            for i, text in enumerate(texts_):
+                query_results_chunks.extend([{"title": titles_[i], "text": para}
                                 for para in text.split(SPECIAL_SEPARATOR)])
+            results_chunks[query] = query_results_chunks
+        if is_generation_topic:
+            return query_results_chunks
         return results_chunks

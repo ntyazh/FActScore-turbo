@@ -130,7 +130,7 @@ class DocDB(object):
         '''
         returns k passages (parts of the texts) most similar to the topic using bm25
         '''
-        query = topic + " " + question.strip()
+        query = topic + " " + question.strip() if topic is not None else question.strip()
         bm25 = BM25Okapi([text["text"].replace("<s>", "").replace(
             "</s>", "").split() for text in texts])
         scores = bm25.get_scores(query.split())

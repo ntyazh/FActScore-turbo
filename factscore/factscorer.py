@@ -67,21 +67,21 @@ class FactScorer(object):
 
 
     async def get_score(self,
-                        topics: list,
+                        # topics: list,
                         generations: list,
                         atomic_facts=None,
+                        topics=None,
                         k=5):
         '''
         сonsistently computes factscore for each generation 
         as unweighted mean of scores for the all atomic facts in the generation
 
-        topics: topics of the generations
+        topics: topics of the atomic facts (if they present, else topics=None)
         generations: the generations we try to score
         atomic_facts: if we already have atomic facts for the generations somehow
         k: how many articles we want to add to the RAG context
         '''
-        assert isinstance(topics, list) and isinstance(
-            generations, list), "generations and topics must be lists"
+        assert isinstance(generations, list), "generations and topics must be lists"
         if self.cost_estimate:
             total_words = 0
             for gen in generations:
@@ -89,29 +89,36 @@ class FactScorer(object):
             return total_words
 
         if atomic_facts is not None:
-            assert len(topics) == len(
-                atomic_facts), "`topics` and `atomic_facts` should have the same length"
+            assert len(topics) == len(atomic_facts), "`topics` and `atomic_facts` should have the same length"
         else:
             atomic_facts, char_level_spans = [], dict()
-            for topic, gen in zip(topics, generations):
-                facts_triplets = await self.af_generator.run(gen) # triplets of the type 
-                # (sentence/passage, [atomic facts from the sentence], [spans of the facts])
+            for gen in generations:
+                facts_triplets = await self.af_generator.run(gen) # triplets of the type (sentence/passage, [atomic facts from the sentence], [spans of the facts])
                 generation_atomic_facts, generation_char_level_spans = [], dict()
                 for triplet in facts_triplets:
-                    generation_atomic_facts.extend(triplet[1])
-                    char_level_spans.update(dict(zip(triplet[1], triplet[2])))
+                    if len(triplet[1]) > 0:
+                        generation_atomic_facts.extend(triplet[1])
+                        char_level_spans.update(dict(zip(triplet[1], triplet[2])))
                 atomic_facts.append(generation_atomic_facts)
-                # char_level_spans.append(generation_char_level_spans)
 
-            assert len(atomic_facts) == len(topics), f"atomic facts should have the same length as topics, got: topics {len(topics)}, atomic facts {len(atomic_facts)}"
+            assert len(atomic_facts) == len(generations), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
             self.af_generator.save_cache()
 
         scores, decisions, passages = [], [], []
-        for topic, facts in zip(topics, atomic_facts):
+        for i, facts in enumerate(atomic_facts):
             if facts is None:
                 decisions.append(None)
                 continue
-            generation_decisions, generation_passages = await self._get_score(topic, facts, char_level_spans, k=k)
+            if len(facts) == 0: #there is no facts to extract in the generation
+                print("NO FACTS TO EXTRACT")
+                scores.append(0)
+                decisions.append(None)
+                passages.append(None)
+                continue
+            if topics is not None:
+                generation_decisions, generation_passages = await self._get_score(facts, char_level_spans, topics[i], k=k)
+            else:
+                generation_decisions, generation_passages = await self._get_score(facts, char_level_spans, k=k)
             if len(generation_decisions) > 0:
                 score = np.mean([d["is_supported"] for d in generation_decisions])
                 decisions.append(generation_decisions)
@@ -119,47 +126,21 @@ class FactScorer(object):
                 scores.append(score)
 
         out = {
-            # "score": np.mean(scores) if len(scores) > 0 else 0.0,
             "decisions": decisions,
-            # "num_facts_per_response": np.mean([len(d) for d in decisions if d is not None]),
             "scores": scores,
             "passages": passages, # for debug, to check that the retrieved from wiki passages really contain appropriate information
         }
-        import json
-        with open("debug.json", 'a+') as f:
-            json.dump(out, f)
-            f.write('\n')
         return out
 
-
-    async def _get_score(self, topic, atomic_facts, char_level_spans, k=2):
+    async def _get_score(self, atomic_facts, char_level_spans, topic:str = None, k=2):
         '''
         gives score for one generation
 
-        topic: topic of the generation
+        topic: topic of the generation (str) 
         atomic_facts: facts from the all sentences of the generation
         '''
         decisions = []
-        prompts = []
-        texts = await self.db.embed_retrieval.get_texts_for_title(topic, k)
-        passages_for_atoms = {}
-        for atom in atomic_facts:
-            atom = atom.strip()
-            passages = self.db.get_bm25_passages(topic, atom, texts, k=k)
-            passages_for_atoms[atom] = passages
-            definition = "Task: answer the question about {} based on the given context. \n\n".format(
-                topic)
-            context = ""
-            for psg in reversed(passages):
-                context += "Title: {}\nText: {}\n\n".format(
-                    psg["title"], psg["text"].replace(
-                        "<s>", "").replace(
-                        "</s>", ""))
-            definition += context.strip()
-            prompt = "{}\n\nInput: {} True or False? Answer True if the information is supported by the context above and False otherwise.\nOutput:".format(
-                definition.strip(), atom.strip())
-            prompts.append((atom, prompt))
-
+        prompts, passages_for_atoms = await self.get_rag_prompts_and_passages(atomic_facts, topic, k)
         outputs = []
         for i in range(0, len(prompts), self.batch_size):
             curr_prompts = prompts[i:min(i + self.batch_size, len(prompts))]
@@ -187,9 +168,38 @@ class FactScorer(object):
                     is_supported = generated_answer.index("true") > generated_answer.index("false")
                 elif "true" in generated_answer:
                     is_supported = True
-                elif "false" in generated_answer:
-                    is_supported = False
                 else:
-                    is_supported = False # TODO: или как??
+                    is_supported = False 
             decisions.append({"atom": atom, "is_supported": is_supported, "span": char_level_spans[atom]})
         return decisions, passages_for_atoms
+
+
+    async def get_rag_prompts_and_passages(self, atomic_facts, topic:str = None, k=2):
+        '''
+        returns the retrieval part with appropriate info from wiki for the each atomic fact
+        '''
+        prompts = []
+        texts = await self.db.embed_retrieval.get_texts_for_title(topic, k) if topic is not None else \
+            await self.db.embed_retrieval.get_texts_for_title(atomic_facts, k)
+        passages_for_atoms = {}
+        for atom in atomic_facts:
+            atom = atom.strip()
+            if topic is not None:
+                passages = self.db.get_bm25_passages(topic, atom, texts, k=k)
+                passages_for_atoms[atom] = passages
+                rag_prompt = f"Task: answer the question about {topic} based on the given context. \n\n"
+            else:
+                passages = self.db.get_bm25_passages(topic, atom, texts[atom], k=k)
+                passages_for_atoms[atom] = passages
+                rag_prompt = "Task: answer the question based on the given context. \n\n"
+            context = ""
+            for psg in reversed(passages):
+                context += "Title: {}\nText: {}\n\n".format(
+                    psg["title"], psg["text"].replace(
+                        "<s>", "").replace(
+                        "</s>", ""))
+            rag_prompt += context.strip()
+            prompt = "{}\n\nInput: {} True or False? Answer True if the information is supported by the context above and False otherwise.\nOutput:".format(
+                rag_prompt.strip(), atom.strip())
+            prompts.append((atom, prompt))
+        return prompts, passages_for_atoms
