@@ -110,79 +110,84 @@ class AtomicFactGenerator(object):
     def save_cache(self):
         self.completions_lm.save_cache()
 
+    async def run(self, generations, cost_estimate=False):
+        """
+        process multiple generations (list of strings) in a single batch.
+        returns a list of results, each mapped to its original generation.
+        """
+        assert isinstance(generations, (str, list)), "Input must be a string or list of strings."
+        if isinstance(generations, str):
+            generations = [generations]
 
-    async def run(self, generation, cost_estimate=False):
-        """
-        Convert the generation into a set of atomic facts.
-        Return a total words cost if cost_estimate == True.
-        """
-        assert isinstance(generation, str), "generation must be a string"
-        paragraphs = [
-            para.strip() for para in generation.split("\n") if len(
-                para.strip()) > 0]
+        all_sentences = []
+        generation_ids = []  # maps each sentence to its original generation index
+        para_breaks_all = []  # track paragraph breaks per generation
         
-        if self.sentence_level:
-            sentences = []
-            para_breaks = []
-            for para_idx, paragraph in enumerate(paragraphs):
-                if para_idx > 0:
-                    para_breaks.append(len(sentences))
-                initials = detect_initials(paragraph)
-                curr_sentences = sent_tokenize(paragraph)
-                curr_sentences = fix_sentence_splitter(curr_sentences, initials)
-                sentences += curr_sentences
-        atoms_or_estimate = await self.get_atomic_facts(sentences if self.sentence_level else paragraphs,
-                                                                        cost_estimate=cost_estimate)
+        for gen_idx, generation in enumerate(generations):
+            paragraphs = [para.strip() for para in generation.split("\n") if para.strip()]
+            
+            if self.sentence_level:
+                sentences = []
+                para_breaks = []
+                for para_idx, paragraph in enumerate(paragraphs):
+                    if para_idx > 0:
+                        para_breaks.append(len(sentences))
+                    initials = detect_initials(paragraph)
+                    curr_sentences = sent_tokenize(paragraph)
+                    curr_sentences = fix_sentence_splitter(curr_sentences, initials)
+                    sentences += curr_sentences
+                all_sentences.extend(sentences)
+                generation_ids.extend([gen_idx] * len(sentences))
+                para_breaks_all.append(para_breaks)
+            else:
+                all_sentences.extend(paragraphs)
+                generation_ids.extend([gen_idx] * len(paragraphs))
+        
+        atoms_or_estimate = await self.get_atomic_facts(all_sentences, cost_estimate)
         if cost_estimate:
-            return atoms_or_estimate
+            return atoms_or_estimate  
         
-        atomic_facts_pairs = [] # pair (orig sentence, [list of facts from it])
-        for sentence_or_paragraph, facts in atoms_or_estimate.items():
-            atomic_facts_pairs.append((sentence_or_paragraph, facts))
-
-        if self.fact_postprocess:
-            atomic_facts_pairs, para_breaks = postprocess_atomic_facts(
-                atomic_facts_pairs, list(para_breaks))
-
-        atomic_facts_triplets = [] # triplets of the type (sentence/passage, [atomic facts from the sentence], [spans of the facts])
-        for pair in atomic_facts_pairs:
-            if len(pair[1]) == 0:
-                atomic_facts_triplets.append((pair[0], [], []))
-                continue
-            facts, char_level_spans = await self.find_facts_spans(generation, pair[1])
-            atomic_facts_triplets.append((pair[0], facts, char_level_spans))
-        return atomic_facts_triplets
+        results_by_generation = [[] for _ in range(len(generations))]
+        for (sentence, facts), gen_idx in zip(atoms_or_estimate.items(), generation_ids):
+            results_by_generation[gen_idx].append((sentence, facts))
         
+        final_results = []
+        for gen_idx, atomic_facts_pairs in enumerate(results_by_generation):
+            if self.fact_postprocess and self.sentence_level:
+                atomic_facts_pairs, para_breaks = postprocess_atomic_facts(
+                    atomic_facts_pairs, para_breaks_all[gen_idx]
+                )
+            
+            atomic_facts_triplets = []
+            for pair in atomic_facts_pairs:
+                if not pair[1]:
+                    atomic_facts_triplets.append((pair[0], [], []))
+                    continue
+                facts, spans = await self.find_facts_spans(generations[gen_idx], pair[1])
+                atomic_facts_triplets.append((pair[0], facts, spans))
+            final_results.append(atomic_facts_triplets)
+        return final_results
+
 
     async def get_atomic_facts(self, sentences: list, cost_estimate=False):
-        '''
-        get atomic facts from sentences if self.sentence_level else get atomic facts from the whole paragraphs, 
-        without breaking them into the facts
-        '''
+        """
+        Process all sentences in a single batch and return mapped results.
+        """
         if cost_estimate:
-            prompt_one = [self.prompt + f"""
-                       Now process the following passage:\nInput passage: "{sentences[0]}"\nOutput:
-                       """]
-            encoding = tiktoken.encoding_for_model('gpt-4o-mini')
-            input_tokens = encoding.encode(prompt_one)
-            return input_tokens * len(sentences)
-
-        prompts = []
-        for sentence in sentences:
-            prompt = self.prompt + f"""
-                       Now process the following passage:\nInput passage: "{sentence}"\nOutput:
-                       """
-            prompts.append(prompt)
+            prompt_one = self.prompt + f'\nInput passage: "{sentences[0]}"\nOutput:'
+            encoding = tiktoken.encoding_for_model('gpt-4')
+            return len(encoding.encode(prompt_one)) * len(sentences)
+    
+        prompts = [
+            self.prompt + f'\nInput passage: "{sentence}"\nOutput:'
+            for sentence in sentences
+        ]
 
         outputs = await self.completions_lm.generate(prompts)
-        sent_to_facts = {}  # dict {sentence: facts from the sentence}
-        if outputs is not None:
-            for i, output in enumerate(outputs):
-                if "No facts to extract" in output:
-                    sent_to_facts[sentences[i]] = []
-                else:
-                    sent_to_facts[sentences[i]] = await self.text_to_facts(output)
-            return sent_to_facts
+        sent_to_facts = {}
+        for sentence, output in zip(sentences, outputs):
+            sent_to_facts[sentence] = [] if "No facts to extract" in output else await self.text_to_facts(output)
+        return sent_to_facts
         
 
     async def text_to_facts(self, text):

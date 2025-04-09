@@ -59,13 +59,14 @@ class EmbedRetrieval:
         '''
         assert isinstance(queries, list)
         embed, _ = await self.ef(queries)
+        if len(embed) == 0:
+            return [], []
         embed = np.array(embed)
         if len(embed.shape) == 1:
             embed = np.array(embed).reshape(1, -1)
         texts, titles = dict(), dict()
         cursor = self.connection.cursor()
         distances_queries, ids_queries = self.index.search(np.array(embed), k)
-        # print("DISTS", distances_queries)
         for query, ids in zip(queries, ids_queries):
             cur_query_texts = []
             cur_query_titles = []
@@ -92,6 +93,8 @@ class EmbedRetrieval:
             topic = [topic]
             is_generation_topic = True
         texts, titles = await self.search(topic, k)
+        if len(texts) == 0 and len(titles) == 0:
+            return []
 
         results_chunks = dict()
         for query in texts.keys():
