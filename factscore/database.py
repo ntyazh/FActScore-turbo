@@ -28,10 +28,10 @@ class DocDB:
             max_passage_length: length of the each chunk (in tokens)
         '''
         self.connection = sqlite3.connect(data_db, check_same_thread=False)
-        if not os.path.exists(data_db):
-            self.build_db(data_json, data_db, max_passage_length)
         self.data_db = data_db
         self.table_name = table_name
+        if not os.path.exists(data_db):
+            self.build_db(data_json, max_passage_length)
 
     def build_db(self, data_path, max_passage_length):
         '''
@@ -49,11 +49,11 @@ class DocDB:
         output_lines = []
         lines_count, start_time = 0, time.time() # for logging
         c = self.connection.cursor()
-        sql_creation = f"CREATE TABLE {self.table_name} (title PRIMARY KEY, text);"
-        c.execute(sql_creation)
+        c.execute(f"CREATE TABLE IF NOT EXISTS {self.table_name} (id, title PRIMARY KEY, text)")
 
         with open(data_path, "r") as f:
             total_len = sum(1 for line in f)
+            print(total_len)
             f.seek(0)
             for line in tqdm(f, desc="Building DB", total=total_len):
                 if line == '\n':
@@ -81,12 +81,12 @@ class DocDB:
                 lines_count += 1
 
                 if len(output_lines) == 1000000:
-                    c.executemany("INSERT INTO documents VALUES (?,?)", output_lines)
+                    c.executemany("INSERT INTO documents VALUES (?,?,?)", output_lines)
                     output_lines = []
                     print("Finish saving %dM documents (%dmin)" % (lines_count / 1000000, (time.time() - start_time) / 60))
 
         if len(output_lines) > 0:
-            c.executemany("INSERT INTO documents VALUES (?,?)", output_lines)
+            c.executemany("INSERT INTO documents VALUES (?, ?, ?)", output_lines)
             print("Finish saving %dM documents (%dmin)" % (lines_count / 1000000, (time.time() - start_time) / 60))
 
         self.connection.commit()
@@ -98,8 +98,7 @@ class DocDB:
         Prints all titles from the db to verify insertion
         '''
         cursor = self.connection.cursor()
-        sql_selection = f"SELECT title FROM {self.table_name}"
-        cursor.execute(sql_selection)
+        cursor.execute(f"SELECT title FROM {self.table_name}")
         titles = cursor.fetchall()  
         for title in titles:
             print(title) 
