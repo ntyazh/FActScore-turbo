@@ -1,16 +1,16 @@
 import aiohttp
 import asyncio
 
-
 async def fetch_with_retries(
-    session: aiohttp.ClientSession,
-    request_url: str,
-    proxy: str,
-    request_header,
-    request_json,
-    max_retries=5,
-    retry_delay=1.0,
-    retry_condition=None):
+        session: aiohttp.ClientSession,
+        request_url: str,
+        proxy: str,
+        request_header: dict,
+        request_json: dict,
+        max_retries=5,
+        retry_delay=1.0,
+        retry_condition=None):
+    
     for attempt in range(max_retries):
         try:
             async with session.post(
@@ -28,8 +28,7 @@ async def fetch_with_retries(
                 return
                         
         except Exception as e:
-            print("failed with exception", e)
-            print(request_json)
+            print(f"request {request_json} failed with exception {e}")
             if retry_condition and not retry_condition(e):
                 raise  
             if attempt < max_retries - 1:
@@ -45,9 +44,8 @@ def get_embedding_from_response(response):
     except KeyError:
         return None
 
-
 def get_content_message_from_response(response):
-    return response['choices'][0]['message']['content'] #chat
+    return response['choices'][0]['message']['content']
 
 
 async def process_api_requests_from_list(
@@ -58,19 +56,16 @@ async def process_api_requests_from_list(
         max_attempts=4,
 ):
     """
-    processes API requests in parallel, throttling to stay under rate limits.
+    Asynchronously processes api requests
     """
     seconds_to_pause_after_error = 2
-    seconds_to_sleep_each_loop = 0.003 # 1 ms limits max throughput to 1,000 requests per second
 
     if proxy is None or proxy == "None":
-        request_header = {"Authorization": f"Bearer {api_key}",
-                        #   "Proxy-Authorization": proxy
-                        }
+        request_header = {"Authorization": f"Bearer {api_key}"}
     else:
         request_header = {"Authorization": f"Bearer {api_key}",
                           "Proxy-Authorization": proxy
-                        }
+                          }
     responses_list, failed_results = [], []
     async with aiohttp.ClientSession() as session:
         tasks = [fetch_with_retries(session=session, 

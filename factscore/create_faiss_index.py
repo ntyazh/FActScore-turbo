@@ -4,10 +4,7 @@ import numpy as np
 import faiss
 from faiss.contrib.ondisk import merge_ondisk
 import os
-# import sys
-# sys.path.append('/data1/n.tyazhova/fact_tdpo/')
-# sys.path.append('/data1/n.tyazhova/fact_tdpo/factscore/')
-from factscore.embed_retrieval import APIEmbeddingFunction
+from factscore.retrieval import APIEmbeddingFunction
 
 '''
 Faiss supports storing IVF indexes in a file on disk and accessing the file on-the-fly.
@@ -39,13 +36,14 @@ trained_index_name = 'faiss.index'
 
 async def get_embeddings(start, part, part_is_final=False):
     '''
-    computes embeddings to the titles with ids from <start> to <start + index_capacity> and loads them on the current index
-    before using this function, you should already have trained IVF index from faiss, for example:
+    Computes embeddings to the titles with ids from <start> to <start + index_capacity> and loads them on the current index
+    Before using this function, you should already have trained IVF index from faiss, for example:
     index = faiss.index_factory(1536, "IVF32768,Flat") (IVF index with 32768 Voronoi cells and no quantization)
-
-    start: from what id to start adding vectors in the index 
-    part: number of the current idx
-    part_is_final: if the current idx is final
+    
+    Args:
+        start: from what id to start adding vectors in the index 
+        part: number of the current idx
+        part_is_final: if the current idx is final
     '''
     connection = sqlite3.connect(data_db)
     cursor = connection.cursor()
@@ -70,8 +68,9 @@ async def get_embeddings(start, part, part_is_final=False):
 
 def merge_sharded_indexes(number_of_indexes, final_index_name="all_vecs.index"):
     '''
-    number_of_indexes: how many sharded indexes you have
-    final_index_name: to what file the merged result will be saved
+    Args:
+        number_of_indexes: how many sharded indexes you have
+        final_index_name: to what file the merged result will be saved
     '''
     print('loading trained index')
     index = faiss.read_index(indexes_dir + trained_index_name)
