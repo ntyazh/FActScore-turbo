@@ -48,6 +48,7 @@ doc_db = DocDB('desired-path-to-db', 'desired-table-name-in-db', 'path-to-json',
 <details>
 <summary> Create factscore instance and register its knowledge source:
 <br>
+  
 ```
 from factscore.factscorer import factscorer
 fs = FactScorer(completions_request_url="for example, https://api.deepinfra.com/v1/openai/chat/completions",
@@ -60,27 +61,32 @@ fs.register_knowledge_source(data_db="path-to-db",
                             )
 
 ```
+
 </details>
 
 <details>
 <summary> Evaluate generations with their topics known (then the titles of the articles will be found for the topics explicitly):
 <br>
+  
 ```
 results = fs.get_score(generations=[generation1, generation2, ...], 
                        topics=[topic1, topic2, ...], 
                        k="number-of-articles-to-find", 
                        n="number-of-chunks")
 ```
+
 </details>
 
 <details>
 <summary> or unknown (then the titles of the articles will be found for the facts themselves):
 <br>
+  
 ```
 results = fs.get_score(generations=[generation1, generation2, ...], 
                        k="number-of-articles-to-find", 
                        n="number-of-chunks")
 ```
+
 </details>
 
 
