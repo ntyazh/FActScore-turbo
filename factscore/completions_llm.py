@@ -1,6 +1,5 @@
-import os
 from factscore.api_requests_processor import process_api_requests_from_list
-from loguru import logger
+import os
 
 
 class CompletionsLLM:

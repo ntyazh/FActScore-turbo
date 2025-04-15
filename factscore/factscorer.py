@@ -1,8 +1,8 @@
+from loguru import logger
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.database import DocDB
 from factscore.retrieval import Retrieval
-from loguru import logger
 
 
 class FactScorer:

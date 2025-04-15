@@ -1,11 +1,11 @@
 import json
 import time
-import sqlite3
 import numpy as np
+from loguru import logger
+import os.path
 from tqdm import tqdm
 from transformers import RobertaTokenizer
-import os.path
-from loguru import logger
+import sqlite3
 
 SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 

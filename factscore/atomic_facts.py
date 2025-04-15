@@ -1,7 +1,7 @@
-import re
-from nltk.tokenize import sent_tokenize
-from factscore.completions_llm import CompletionsLLM
 from loguru import logger
+from nltk.tokenize import sent_tokenize
+import re
+from factscore.completions_llm import CompletionsLLM
 
 SENTENCE_INSTRUCT_PROMPT = """
 Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
