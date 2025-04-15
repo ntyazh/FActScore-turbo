@@ -2,6 +2,8 @@ from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.database import DocDB
 from factscore.retrieval import Retrieval
+from loguru import logger
+
 
 class FactScorer:
     def __init__(self,
@@ -39,7 +41,7 @@ class FactScorer:
 
     def register_knowledge_source(
             self,
-            faiss_index: str, 
+            faiss_index: str,
             data_db: str,
             table_name: str,
             embedding_dimension: int = 1536,
@@ -91,6 +93,8 @@ class FactScorer:
         else:
             atomic_facts, char_level_spans = [], []
             outputs = await self.af_generator.run(generations)
+            if len(outputs) == 0:
+                return {"decisions": [], "scores": [0 for _ in range(len(generations))]}
             for facts_triplets in outputs:
                 generation_atomic_facts, generation_char_level_spans = [], dict()
                 for triplet in facts_triplets:
@@ -99,10 +103,13 @@ class FactScorer:
                         generation_char_level_spans.update(dict(zip(triplet[1], triplet[2])))
                 atomic_facts.append(generation_atomic_facts)
                 char_level_spans.append(generation_char_level_spans)
-            assert len(atomic_facts) == len(generations), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
+            assert len(atomic_facts) == len(
+                generations), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
 
         scores = []
         decisions, passages = await self._get_score(atomic_facts, char_level_spans, k=k, n=n, topics=topics)
+        if len(decisions) == 0: 
+            return {"decisions": [], "scores": [0 for _ in range(len(generations))]}
         for generation_decisions in decisions:
             score = 0
             if len(generation_decisions) == 0:
@@ -115,15 +122,15 @@ class FactScorer:
         out = {
             "decisions": decisions,
             "scores": scores,
-            # "passages": passages, # for debug, to check that the retrieved from the database passages really contain the appropriate information
+            # "passages": passages,  # for debug, to check that the retrieved from the database passages really contain the appropriate information
         }
         return out
-    
-    async def _get_score(self, 
-                         atomic_facts: list[list[str]], 
-                         char_level_spans: list[dict], 
-                         k: int, 
-                         n: int, 
+
+    async def _get_score(self,
+                         atomic_facts: list[list[str]],
+                         char_level_spans: list[dict],
+                         k: int,
+                         n: int,
                          topics: list = None) -> tuple[list[list[dict]], list[dict]]:
         '''
         Computes factual scores for batch of generations using completions_lm.generate
@@ -148,11 +155,15 @@ class FactScorer:
                 all_topics.extend([topics[gen_idx]] * len(facts))
             fact_origin.extend([gen_idx] * len(facts))
 
-        prompts, passages_for_atoms = await self.get_rag_prompts_and_passages(all_facts, 
-                                                                              topics=all_topics if topics is not None else None,  
+        prompts, passages_for_atoms = await self.get_rag_prompts_and_passages(all_facts,
+                                                                              topics=all_topics if topics is not None else None,
                                                                               k=k, n=n)
+        if len(prompts) == 0:
+            logger.debug("Could not find RAG-info for generations. Please check your embedding API")
+            return [], []
         outputs = await self.lm.generate([p[1] for p in prompts])
-
+        if len(outputs) == 0:
+            logger.debug("Could not evaluate if generations facts are true. Please check your completion API")
         decisions_by_generation = [[] for _ in range(len(atomic_facts))]
         for i, (output, (fact, _)) in enumerate(zip(outputs, prompts)):
             gen_idx = fact_origin[i]
@@ -172,10 +183,10 @@ class FactScorer:
             })
         return decisions_by_generation, passages_for_atoms
 
-    async def get_rag_prompts_and_passages(self, 
-                                           atomic_facts: list[str], 
-                                           k: int, 
-                                           n: int, 
+    async def get_rag_prompts_and_passages(self,
+                                           atomic_facts: list[str],
+                                           k: int,
+                                           n: int,
                                            topics: list[str] = None):
         '''
         Retrieves the appropriate information from the database and makes RAG-prompt for the each fact
@@ -191,6 +202,8 @@ class FactScorer:
         prompts = []
         texts = await self.retrieval.get_texts_for_queries(topics, k) if topics is not None else \
             await self.retrieval.get_texts_for_queries(atomic_facts, k)
+        if len(texts) == 0:
+            return texts, []
         passages_for_atoms = {}
         for i, atom in enumerate(atomic_facts):
             atom = atom.strip()
@@ -209,3 +222,4 @@ class FactScorer:
             prompt = f"{definition.strip()}\n\nInput: {atom.strip()} True or False? Answer True if the information is supported by the context above and False otherwise.\nOutput:"
             prompts.append((atom, prompt))
         return prompts, passages_for_atoms
+    

@@ -33,13 +33,14 @@ class APIEmbeddingFunction:
         embeds: list of embeddings for the input_texts
         failed_results: list of raised exceptions if the requests were not successful
         '''
-        requests = list(map(lambda x: {"input": x, "model": self.model_name, "dimensions": self.dimensions}, input_texts))
-        embeds, failed_results = await process_api_requests_from_list(requests,
-                                                                      self.base_url,
-                                                                      api_key=os.environ["EMBEDDINGS_API_KEY"],
-                                                                      proxy=os.environ["EMBEDDINGS_PROXY"] if os.environ["EMBEDDINGS_PROXY"] != "None" else None,
-                                                                      )
-        return embeds, failed_results
+        requests = list(map(lambda x: {"input": x, "model": self.model_name,
+                        "dimensions": self.dimensions}, input_texts))
+        embeds = await process_api_requests_from_list(requests,
+                                                      self.base_url,
+                                                      api_key=os.environ["EMBEDDINGS_API_KEY"],
+                                                      proxy=os.environ["EMBEDDINGS_PROXY"] if os.environ["EMBEDDINGS_PROXY"] != "None" else None,
+                                                      )
+        return embeds
 
 
 class Retrieval:
@@ -69,7 +70,7 @@ class Retrieval:
         self.table_name = table_name
         self.connection = sqlite3.connect(data_db)
 
-    async def search_titles(self, queries: list[str], k: int) -> dict[str: list[str]]: 
+    async def search_titles(self, queries: list[str], k: int) -> dict[str: list[str]]:
         '''
         Searches for k titles from the database with the closest embedding distance to the query.
         Args:
@@ -81,7 +82,7 @@ class Retrieval:
             titles: dict {query: the k found titles for the query}
         '''
         assert isinstance(queries, list)
-        embed, _ = await self.ef(queries)
+        embed = await self.ef(queries)
         if len(embed) == 0:
             return [], []
         embed = np.array(embed)
@@ -128,10 +129,11 @@ class Retrieval:
             query_results_chunks = []
             query_texts, query_titles = texts[query], titles[query]
             for i, text in enumerate(query_texts):
-                query_results_chunks.extend([{"title": query_titles[i], "text": para} for para in text.split(SPECIAL_SEPARATOR)])
+                query_results_chunks.extend([{"title": query_titles[i], "text": para}
+                                            for para in text.split(SPECIAL_SEPARATOR)])
             results_chunks[query] = query_results_chunks
         return results_chunks
-    
+
     def get_bm25_passages(self, topic: str, fact: str, chunks: list[dict], n: int) -> list[dict]:
         '''
         Searches for n chunks that are most similar to the topic and fact using bm25
@@ -150,3 +152,4 @@ class Retrieval:
         scores = bm25.get_scores(query.split())
         indices = np.argsort(-scores)[:n]
         return [chunks[i] for i in indices]
+    

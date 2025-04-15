@@ -1,6 +1,7 @@
 import re
 from nltk.tokenize import sent_tokenize
 from factscore.completions_llm import CompletionsLLM
+from loguru import logger
 
 SENTENCE_INSTRUCT_PROMPT = """
 Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
@@ -116,12 +117,12 @@ class AtomicFactGenerator:
         if isinstance(generations, str):
             generations = [generations]
 
-        all_passages = [] # all_passages[i] == list of the passage from the i-th generation
-        generation_ids = [] # maps each passage to its original generation index
-        
+        all_passages = []  # all_passages[i] == list of the passage from the i-th generation
+        generation_ids = []  # maps each passage to its original generation index
+
         for gen_idx, generation in enumerate(generations):
             paragraphs = [para.strip() for para in generation.split("\n") if para.strip()]
-            
+
             if self.sentence_level:
                 passages = []
                 for para_idx, paragraph in enumerate(paragraphs):
@@ -131,18 +132,21 @@ class AtomicFactGenerator:
             else:
                 all_passages.extend(paragraphs)
                 generation_ids.extend([gen_idx] * len(paragraphs))
-        
-        atoms = await self.get_atomic_facts(all_passages)        
-        results_by_generation = [[] for _ in range(len(generations))] # results_by_generation[i] == \
+
+        atoms = await self.get_atomic_facts(all_passages)
+        if len(atoms) == 0:
+            logger.debug("Could not extract atomic facts from generations. Please check your completion API")
+            return []
+        results_by_generation = [[] for _ in range(len(generations))]  # results_by_generation[i] == \
         # list of tuples (passage, list of the facts from the passage) for the all passages from the i-th generation
         for (sentence, facts), gen_idx in zip(atoms.items(), generation_ids):
             results_by_generation[gen_idx].append((sentence, facts))
-        
+
         generations_triplets = []
         for gen_idx, atomic_facts_pairs in enumerate(results_by_generation):
             atomic_facts_triplets = []
             for pair in atomic_facts_pairs:
-                if not pair[1]: # if facts for the passage pair[0] were not found
+                if not pair[1]:  # if facts for the passage pair[0] were not found
                     atomic_facts_triplets.append((pair[0], [], []))
                     continue
                 facts, spans = self.find_facts_spans(generations[gen_idx], pair[1])
@@ -161,7 +165,9 @@ class AtomicFactGenerator:
             sent_to_facts: dict {passage: list of facts from the passage}
         """
         prompts = [
-            self.prompt + f'\nInput Sentence: "{sentence}"\nOutput:' if self.sentence_level else self.prompt + f'\nInput Sentence: "{sentence}"\nOutput:'
+            self.prompt +
+            f'\nInput Sentence: "{sentence}"\nOutput:' if self.sentence_level else self.prompt +
+            f'\nInput Sentence: "{sentence}"\nOutput:'
             for sentence in passages
         ]
         outputs = await self.completions_lm.generate(prompts)
@@ -183,7 +189,7 @@ class AtomicFactGenerator:
             if facts[-1][-1] != '.':
                 facts[-1] = facts[-1] + '.'
         return facts
-    
+
     def find_facts_spans(self, generation: str, facts: list[str]):
         '''
         1. Extracts citations of the facts from the generation
@@ -200,15 +206,14 @@ class AtomicFactGenerator:
             try:
                 citation = re.findall(pattern, fact)[0]
             except IndexError:
-                print("couldn't find the pattern [[ ]] for the fact spans in the generation:", fact)
+                logger.warning("Couldn't find the pattern [[ ]] for the fact spans in the generation:", fact)
                 continue
             start_citation_index = generation.find(citation.lower())
             if start_citation_index == -1:
-                # TODO: как лучше?
                 span = self.find_maximal_substring_with_span(generation, citation.lower())
                 if span[0] == 0 and span[1] == 0:
-                    print(
-                        f"couldn't find the citation in the original text.\ncitation: {citation}\noriningal text: {original_text}")
+                    logger.warning(
+                        f"Couldn't find the citation in the generation.\nCitation: {citation}\nGeneration: {generation}")
                     continue
                 postprocessed_facts.append(re.sub(pattern, '', fact).strip())
                 spans.append(span)
@@ -222,10 +227,11 @@ class AtomicFactGenerator:
         sub_words = sub_str.split()
         max_len = len(sub_words)
         end = len(sub_words)
-        for length in range(max_len, 0, -1):  
-            candidate = ' '.join(sub_words[end - length:end]) 
+        for length in range(max_len, 0, -1):
+            candidate = ' '.join(sub_words[end - length:end])
             if candidate in main_str:
                 start_idx = main_str.find(candidate)
                 end_idx = start_idx + len(candidate)
                 return (start_idx, end_idx)
-        return (0, 0)  
+        return (0, 0)
+    

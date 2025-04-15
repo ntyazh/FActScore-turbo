@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from transformers import RobertaTokenizer
 import os.path
+from loguru import logger
 
 SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 
@@ -47,13 +48,12 @@ class DocDB:
 
         titles = set()
         output_lines = []
-        lines_count, start_time = 0, time.time() # for logging
+        lines_count, start_time = 0, time.time()  # for logging
         c = self.connection.cursor()
         c.execute(f"CREATE TABLE IF NOT EXISTS {self.table_name} (id, title PRIMARY KEY, text)")
 
         with open(data_path, "r") as f:
             total_len = sum(1 for line in f)
-            print(total_len)
             f.seek(0)
             for line in tqdm(f, desc="Building DB", total=total_len):
                 if line == '\n':
@@ -75,7 +75,8 @@ class DocDB:
                         passages.append(tokens[offset:offset + max_passage_length])
                         offset += max_passage_length
 
-                psgs = [tokenizer.decode(tokens) for tokens in passages if np.sum([t not in [0, 2] for t in tokens]) > 0]
+                psgs = [tokenizer.decode(tokens)
+                        for tokens in passages if np.sum([t not in [0, 2] for t in tokens]) > 0]
                 text = SPECIAL_SEPARATOR.join(psgs)
                 output_lines.append((lines_count, title, text))
                 lines_count += 1
@@ -83,11 +84,13 @@ class DocDB:
                 if len(output_lines) == 1000000:
                     c.executemany("INSERT INTO documents VALUES (?,?,?)", output_lines)
                     output_lines = []
-                    print("Finish saving %dM documents (%dmin)" % (lines_count / 1000000, (time.time() - start_time) / 60))
+                    logger.info("Finish saving %dM documents (%dmin)" %
+                                (lines_count / 1000000, (time.time() - start_time) / 60))
 
         if len(output_lines) > 0:
             c.executemany("INSERT INTO documents VALUES (?, ?, ?)", output_lines)
-            print("Finish saving %dM documents (%dmin)" % (lines_count / 1000000, (time.time() - start_time) / 60))
+            logger.info("Finish saving %dM documents (%dmin)" %
+                        (lines_count / 1000000, (time.time() - start_time) / 60))
 
         self.connection.commit()
         self.check_titles_inserted()
@@ -99,7 +102,8 @@ class DocDB:
         '''
         cursor = self.connection.cursor()
         cursor.execute(f"SELECT title FROM {self.table_name}")
-        titles = cursor.fetchall()  
+        titles = cursor.fetchall()
         for title in titles:
-            print(title) 
+            print(title)
         cursor.close()
+        

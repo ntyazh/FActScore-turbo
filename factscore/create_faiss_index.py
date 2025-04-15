@@ -5,6 +5,7 @@ import faiss
 from faiss.contrib.ondisk import merge_ondisk
 import os
 from factscore.retrieval import APIEmbeddingFunction
+from loguru import logger
 
 '''
 Faiss supports storing IVF indexes in a file on disk and accessing the file on-the-fly.
@@ -28,7 +29,7 @@ os.environ["EMBEDDINGS_PROXY"] = "your proxy"
 
 indexes_dir = 'path/to/folder/with/indexes/'
 base_url = "https://api.openai.com/v1/embeddings"
-data_db = "/path/to/db" 
+data_db = "/path/to/db"
 table_db = "documents"
 index_capacity = 500_000
 trained_index_name = 'faiss.index'
@@ -39,7 +40,7 @@ async def get_embeddings(start, part, part_is_final=False):
     Computes embeddings to the titles with ids from <start> to <start + index_capacity> and loads them on the current index
     Before using this function, you should already have trained IVF index from faiss, for example:
     index = faiss.index_factory(1536, "IVF32768,Flat") (IVF index with 32768 Voronoi cells and no quantization)
-    
+
     Args:
         start: from what id to start adding vectors in the index 
         part: number of the current idx
@@ -54,7 +55,7 @@ async def get_embeddings(start, part, part_is_final=False):
                               model_name="text-embedding-3-small",
                               dimensions=1536)
     index = faiss.read_index(indexes_dir + trained_index_name)
-    print("start adding")
+    logger.info("Start adding vectors to the index")
     for i in tqdm(range(start, min(start + index_capacity, len(titles)), batch_size)):
         ids = [j for j in range(i, min(i + batch_size, len(titles)))]
         titles_to_add = list(map(lambda x: str(x[0]), titles[ids[0]: ids[-1] + 1]))
@@ -72,13 +73,12 @@ def merge_sharded_indexes(number_of_indexes, final_index_name="all_vecs.index"):
         number_of_indexes: how many sharded indexes you have
         final_index_name: to what file the merged result will be saved
     '''
-    print('loading trained index')
     index = faiss.read_index(indexes_dir + trained_index_name)
     block_fnames = [
         indexes_dir + "block_%d.index" % bno
         for bno in range(1, number_of_indexes)
     ]
     merge_ondisk(index, block_fnames, indexes_dir + "merged_index.ivfdata")
-    print("write " + indexes_dir + final_index_name)
+    logger.info("Writing " + indexes_dir + final_index_name)
     faiss.write_index(index, indexes_dir + final_index_name)
-
+    

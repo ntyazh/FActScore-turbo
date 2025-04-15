@@ -1,12 +1,14 @@
 import os
 from factscore.api_requests_processor import process_api_requests_from_list
+from loguru import logger
+
 
 class CompletionsLLM:
     def __init__(
             self,
             completions_request_url: str,
             completions_model_name: str
-            ):
+    ):
         '''
         Asynchronously sends requests to the completion llm
 
@@ -26,15 +28,13 @@ class CompletionsLLM:
             return []
         messages = list(map(lambda x: {"messages": [{"role": "user", "content": x}],
                                        "model": self.model_name},
-                                       prompts))
-        responses, failed_results = await process_api_requests_from_list(requests=messages,
-                                                                       request_url=self.completions_request_url,
-                                                                       api_key=os.environ["COMPLETIONS_API_KEY"],
-                                                                       proxy=os.environ["COMPLETIONS_PROXY"] if os.environ["COMPLETIONS_PROXY"] != "None" else None
-                                                                       )
-        if len(responses) == 0:
-            print(f"completion requests have raised these exceptions:\n{failed_results}")
-            print(f"failed to get response for these prompts:\n{prompts}")
-        if isinstance(responses[0], list):
+                            prompts))
+        responses = await process_api_requests_from_list(requests=messages,
+                                                         request_url=self.completions_request_url,
+                                                         api_key=os.environ["COMPLETIONS_API_KEY"],
+                                                         proxy=os.environ["COMPLETIONS_PROXY"] if os.environ["COMPLETIONS_PROXY"] != "None" else None
+                                                         )
+        if len(responses) > 0 and isinstance(responses[0], list):
             responses = responses[0]
         return responses
+    
