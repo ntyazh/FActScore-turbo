@@ -11,7 +11,7 @@ The changes made are significant:
 ## Setup
 **Prerequisites:**
 *  json-file with the knowledge source information (see more on its format in database.py)
-*  embeddings of the knowledge source titles and trained faiss index for them (see more in create_faiss_index.py)
+*  embeddings of the knowledge source titles and trained faiss index for them (you can create a sharded index from it to reduce RAM usage with create_faiss_index.py)
 
 Create a conda environment with python3.12:
 ```
