@@ -37,10 +37,12 @@ os.environ['COMPLETIONS_PROXY'] = "your proxy for completions model" (if not nee
 <details>
 <summary> Create db-file with your json-file database:
 <br>
+  
 ```
 from factscore.database import DocDB
 doc_db = DocDB('desired-path-to-db', 'desired-table-name-in-db', 'path-to-json', size_of_chunks)
 ```
+
 </details>
 
 <details>
