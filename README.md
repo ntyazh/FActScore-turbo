@@ -3,10 +3,14 @@ The repository is an enhanced version of the [original factscore](https://github
 See more about the pipeline in factscorer.py.
 
 The changes made are significant:
-1. matching titles from the database are searched by embedding distances rather than by character-level comparison as in the original.
-2. you may not pass the topic of the generation explicitly: the titles will be found for each generation fact itself.
-3. all API requests are sent asynchronously that dramatically reduces the execution time to, for example, 5.5 seconds for a batch of three one-sentence generations.
-4. you can provide any knowledge source you want, and the appropriate database will be created automatically
+1. the pipeline accelerates fact checking by ~6.5 times due to asynchronous API queries and batchization.
+2. provides much more reliable, stable and fast search of documents from the database by adding vector sharded FAISS index: matching titles from the database are searched by embedding distances rather than by character-level comparison as in the original.
+3. supports adding arbitrary database.
+4. has a much more user-friendly user interface.
+5. one may not pass the topic of the generation explicitly: the titles will be found for each generation fact itself.
+
+This pipline helped to retrain the small LLM SmolLM2-360M-Instruct for factual accuracy and increase the corresponding truthfulQA metric from 0.27 to 0.31.
+
 
 ## Setup
 **Prerequisites:**
