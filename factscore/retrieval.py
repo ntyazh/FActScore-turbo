@@ -1,10 +1,10 @@
-import faiss
 import numpy as np
 import os
 import sqlite3
+import faiss
+from factscore.api_requests_processor import process_api_requests_from_list
 from rank_bm25 import BM25Okapi
 from typing import Union
-from factscore.api_requests_processor import process_api_requests_from_list
 
 SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 

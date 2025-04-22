@@ -1,8 +1,8 @@
-import faiss
-from faiss.contrib.ondisk import merge_ondisk
 from tqdm import tqdm
 import sqlite3
 import numpy as np
+import faiss
+from faiss.contrib.ondisk import merge_ondisk
 import os
 from factscore.retrieval import APIEmbeddingFunction
 from loguru import logger

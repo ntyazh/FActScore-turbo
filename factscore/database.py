@@ -1,11 +1,11 @@
 import json
 import time
+import sqlite3
 import numpy as np
-from loguru import logger
-import os.path
 from tqdm import tqdm
 from transformers import RobertaTokenizer
-import sqlite3
+import os.path
+from loguru import logger
 
 SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 
@@ -20,7 +20,8 @@ class DocDB:
         '''
         Creates sqlite3 data db from the json-file of the type {title: text}, if it doesn't exist yet,
         otherwise just connects to it.
-        The db has three columns: id, title, text, where text consists of chunks with the number of tokens max_passage_length, joined with SPECIAL_SEPARATOR
+        The db has three columns: id, title, text, where text consists of chunks with the number of tokens max_passage_length, 
+        joined with SPECIAL_SEPARATOR
 
         Args:
             data_db: path to .db file with columns (id, title, text) 

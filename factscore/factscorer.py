@@ -1,8 +1,8 @@
-from loguru import logger
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.database import DocDB
 from factscore.retrieval import Retrieval
+from loguru import logger
 
 
 class FactScorer:
@@ -15,7 +15,8 @@ class FactScorer:
                  ):
         '''
         Computes factual score for a generation using the following pipeline:
-        1. splits the original generation into passages (either sentences, as it is done in the original factscore, or paragraphs; depending on sentence_level)
+        1. if sentence_level is True, splits the original generation into sentences (called passages), 
+        as it is done in the original factscore. otherwise, the passages is the generation itself.
         2. extracts independent atomic facts from the each passage with completions_model
         3. searches for the k closest to query (topic of the generation (if specified), or the fact itself) titles from the database using the embedding distances
         4. finds the n closest chunks of texts with these titles using bm25

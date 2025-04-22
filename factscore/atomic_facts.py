@@ -1,7 +1,7 @@
-from loguru import logger
-from nltk.tokenize import sent_tokenize
 import re
+from nltk.tokenize import sent_tokenize
 from factscore.completions_llm import CompletionsLLM
+from loguru import logger
 
 SENTENCE_INSTRUCT_PROMPT = """
 Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
@@ -62,26 +62,16 @@ Output:
 - Turing played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic. [[He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic.]]
 
 Example 2:
-Input Passage: "Centrioles are a very important part of the cell wall. They are also involved in the formation of the spindle fibers during cell division and in the formation of the centrosomes, which are involved in the formation of the nuclear envelope during mitosis."
-Output:
-- Centrioles are a very important part of the cell wall [[Centrioles are a very important part of the cell wall]]
-- Centrioles are involved in the formation of the spindle fibers during cell division [[They are also involved in the formation of the spindle fibers during cell division]]
-- Centrioles involved in the formation of the centrosomes [[in the formation of the centrosomes]]
-- Centrosomes are involved in the formation of the nuclear envelope during mitosis [[centrosomes, which are involved in the formation of the nuclear envelope during mitosis]]
-
-Example 3:
 Input Passage: "The mutation can be caused by errors during DNA replication, exposure to harmful toxins or radiation, or genetic changes."
 Output:
 - The mutation can be caused by errors during DNA replication [[The mutation can be caused by errors during DNA replication]]
 - The mutation can be caused by exposure to harmful toxins or radiation [[exposure to harmful toxins or radiation]]
 - The mutation can be caused by genetic changes [[genetic changes]]
 
-Example 4:
+Example 3:
 Input Passage: "<EXAMPLE 1> 
 <QUESTION>: 
-<EXAMPLE 2> 
-<EXAMPLE 3> 
-<EXAMPLE"
+<EXAMPLE 2>"
 Output:
 - No facts to extract
 """
@@ -96,7 +86,7 @@ class AtomicFactGenerator:
             request_url: url to send request for the factual breakdown
             model_name: model to use for the factual breakdown
             sentence_level: whether to break down the generation into sentences before the factual breakdown 
-            as in the original factscore or break down into paragraphs
+            as in the original factscore
         '''
         self.model_name = model_name
         self.sentence_level = sentence_level
@@ -107,7 +97,7 @@ class AtomicFactGenerator:
 
     async def run(self, generations: list[str]):
         """
-        1. Breaks down each generation into list of passages (sentences or paragraphs depending on self.sentence_level)
+        1. Breaks down each generation into list of passages (sentences or generation itself depending on self.sentence_level)
         2. Breaks them down into independent facts with get_atomic_facts
 
         Returns:
@@ -121,17 +111,13 @@ class AtomicFactGenerator:
         generation_ids = []  # maps each passage to its original generation index
 
         for gen_idx, generation in enumerate(generations):
-            paragraphs = [para.strip() for para in generation.split("\n") if para.strip()]
-
             if self.sentence_level:
-                passages = []
-                for para_idx, paragraph in enumerate(paragraphs):
-                    passages += sent_tokenize(paragraph)
+                passages = sent_tokenize(generation)
                 all_passages.extend(passages)
                 generation_ids.extend([gen_idx] * len(passages))
             else:
-                all_passages.extend(paragraphs)
-                generation_ids.extend([gen_idx] * len(paragraphs))
+                all_passages.append(generation)
+                generation_ids.append(gen_idx)
 
         atoms = await self.get_atomic_facts(all_passages)
         if len(atoms) == 0:
