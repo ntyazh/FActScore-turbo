@@ -14,7 +14,7 @@ See more about the pipeline details in [``factscorer.py``](https://github.com/nt
 ## Setup
 **Prerequisites:**
 * json-file with the knowledge source information of the format:
-```json
+```
 {"title": TITLE_1, "text": TEXT_1}
 {"title": TITLE_2, "text": TEXT_2}
 ...
