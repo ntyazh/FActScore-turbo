@@ -1,10 +1,12 @@
-import numpy as np
 import os
 import sqlite3
-import faiss
-from factscore.api_requests_processor import process_api_requests_from_list
-from rank_bm25 import BM25Okapi
 from typing import Union
+
+import faiss
+import numpy as np
+from rank_bm25 import BM25Okapi
+
+from factscore.api_requests_processor import process_api_requests_from_list
 
 SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 
@@ -12,18 +14,15 @@ SPECIAL_SEPARATOR = "####SPECIAL####SEPARATOR####"
 class APIEmbeddingFunction:
     def __init__(
             self,
-            base_url: str,
             model_name: str,
             dimensions: int = 1536
     ):
         '''
         Function for sending requests to receive embeddings
 
-        base_url: url to send the embedding requests to
         model_name: name of the embedding model to use
         dimensions: dimension of the embeddings
         '''
-        self.base_url = base_url
         self.model_name = model_name
         self.dimensions = dimensions
 
@@ -36,7 +35,7 @@ class APIEmbeddingFunction:
         requests = list(map(lambda x: {"input": x, "model": self.model_name,
                         "dimensions": self.dimensions}, input_texts))
         embeds = await process_api_requests_from_list(requests,
-                                                      self.base_url,
+                                                      os.environ["EMBEDDINGS_BASE_URL"],
                                                       api_key=os.environ["EMBEDDINGS_API_KEY"],
                                                       proxy=os.environ["EMBEDDINGS_PROXY"] if os.environ["EMBEDDINGS_PROXY"] != "None" else None,
                                                       )
@@ -45,7 +44,6 @@ class APIEmbeddingFunction:
 
 class Retrieval:
     def __init__(self,
-                 embedding_base_url: str,
                  embedding_model_name: str,
                  faiss_index: str,
                  data_db: str,
@@ -56,15 +54,13 @@ class Retrieval:
         Retrieves chunks of the texts in the database for the RAG-pipeline.
 
         Args:
-            embedding_base_url: url to post embeddings requests to (for example, https://openai.com/v1/embeddings)
             embedding_model_name: model to use to get embeddings (for example, text-embedding-3-small)
             faiss_index: path to the final IVF index with the all title embeddings (you can get it with create_faiss_index.py)
             data_db: path to the db file with the database
             table_name: name of the table with titles and texts in the database
             embedding_dimension: dimension of the title embedding
         '''
-        self.ef = APIEmbeddingFunction(base_url=embedding_base_url,
-                                       model_name=embedding_model_name,
+        self.ef = APIEmbeddingFunction(model_name=embedding_model_name,
                                        dimensions=embed_dimension)
         self.index = faiss.read_index(faiss_index)
         self.table_name = table_name

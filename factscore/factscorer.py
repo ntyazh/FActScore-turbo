@@ -1,15 +1,14 @@
+from loguru import logger
+
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.database import DocDB
 from factscore.retrieval import Retrieval
-from loguru import logger
 
 
 class FactScorer:
     def __init__(self,
-                 completions_request_url,
                  completions_model_name,
-                 embeddings_request_url,
                  embeddings_model_name,
                  sentence_level=False
                  ):
@@ -25,20 +24,16 @@ class FactScorer:
         All requests are processed asynchronously and batched that speeds up the pipeline.
 
         Args:
-            completions_request_url: url to send requests for splitting a generarion into facts and evaluating if facts are supported by the database
             completions_model_name: model to use for the requests in the previous point
-            embeddings_request_url: url to send requests for computing the embeddings
             embeddings_model_name: model to use for computing the embeddings
             sentence_level: whether to split a generation into sentences before the factual breakdown
         '''
-        self.embeddings_base_url, self.embeddings_model_name = embeddings_request_url, embeddings_model_name
+        self.embeddings_model_name = embeddings_model_name
         self.af_generator = AtomicFactGenerator(
-            request_url=completions_request_url,
             model_name=completions_model_name,
             sentence_level=sentence_level)
         self.lm = CompletionsLLM(
-            completions_model_name=completions_model_name,
-            completions_request_url=completions_request_url)
+            completions_model_name=completions_model_name)
 
     def register_knowledge_source(
             self,
@@ -61,7 +56,6 @@ class FactScorer:
                         table_name=table_name)
         self.retrieval = Retrieval(data_db=data_db,
                                    table_name=table_name,
-                                   embedding_base_url=self.embeddings_base_url,
                                    embedding_model_name=self.embeddings_model_name,
                                    faiss_index=faiss_index,
                                    embed_dimension=embedding_dimension)

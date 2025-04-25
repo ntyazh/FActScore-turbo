@@ -1,11 +1,13 @@
-from tqdm import tqdm
-import sqlite3
-import numpy as np
-import faiss
-from faiss.contrib.ondisk import merge_ondisk
 import os
-from factscore.retrieval import APIEmbeddingFunction
+import sqlite3
+
+import faiss
+import numpy as np
+from faiss.contrib.ondisk import merge_ondisk
 from loguru import logger
+from tqdm import tqdm
+
+from factscore.retrieval import APIEmbeddingFunction
 
 '''
 Faiss supports storing IVF indexes in a file on disk and accessing the file on-the-fly.

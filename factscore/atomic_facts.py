@@ -1,7 +1,9 @@
 import re
-from nltk.tokenize import sent_tokenize
-from factscore.completions_llm import CompletionsLLM
+
 from loguru import logger
+from nltk.tokenize import sent_tokenize
+
+from factscore.completions_llm import CompletionsLLM
 
 SENTENCE_INSTRUCT_PROMPT = """
 Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
@@ -78,12 +80,11 @@ Output:
 
 
 class AtomicFactGenerator:
-    def __init__(self, request_url, model_name, sentence_level=False):
+    def __init__(self, model_name, sentence_level=False):
         '''
         Asynchronously breaks list of the generations into lists of facts
 
         Args:
-            request_url: url to send request for the factual breakdown
             model_name: model to use for the factual breakdown
             sentence_level: whether to break down the generation into sentences before the factual breakdown 
             as in the original factscore
@@ -91,8 +92,7 @@ class AtomicFactGenerator:
         self.model_name = model_name
         self.sentence_level = sentence_level
         self.completions_lm = CompletionsLLM(
-            completions_model_name=self.model_name,
-            completions_request_url=request_url)
+            completions_model_name=self.model_name)
         self.prompt = SENTENCE_INSTRUCT_PROMPT if self.sentence_level else PARAGRAPH_INSTRUCT_PROMPT
 
     async def run(self, generations: list[str]):
@@ -196,7 +196,7 @@ class AtomicFactGenerator:
                 continue
             start_citation_index = generation.find(citation.lower())
             if start_citation_index == -1:
-                span = self.find_maximal_substring_with_span(generation, citation.lower())
+                span = self._find_maximal_substring_with_span(generation, citation.lower())
                 if span[0] == 0 and span[1] == 0:
                     logger.warning(
                         f"Couldn't find the citation in the generation.\nCitation: {citation}\nGeneration: {generation}")
@@ -209,7 +209,7 @@ class AtomicFactGenerator:
             spans.append((start_citation_index, end_citation_index))
         return postprocessed_facts, spans
 
-    def find_maximal_substring_with_span(self, main_str, sub_str):
+    def _find_maximal_substring_with_span(self, main_str, sub_str):
         sub_words = sub_str.split()
         max_len = len(sub_words)
         end = len(sub_words)
