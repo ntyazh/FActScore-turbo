@@ -7,14 +7,12 @@ from factscore.retrieval import Retrieval
 
 
 class FactScorer:
-    def __init__(self,
-                 completions_model_name,
-                 embeddings_model_name,
-                 sentence_level=False
-                 ):
-        '''
+    def __init__(
+        self, completions_model_name, embeddings_model_name, sentence_level=False
+    ):
+        """
         Computes factual score for a generation using the following pipeline:
-        1. if sentence_level is True, splits the original generation into sentences (called passages), 
+        1. if sentence_level is True, splits the original generation into sentences (called passages),
         as it is done in the original factscore. otherwise, the passages is the generation itself.
         2. extracts independent atomic facts from the each passage with completions_model
         3. searches for the k closest to query (topic of the generation (if specified), or the fact itself) titles from the database using the embedding distances
@@ -27,22 +25,22 @@ class FactScorer:
             completions_model_name: model to use for the requests in the previous point
             embeddings_model_name: model to use for computing the embeddings
             sentence_level: whether to split a generation into sentences before the factual breakdown
-        '''
+        """
         self.embeddings_model_name = embeddings_model_name
         self.af_generator = AtomicFactGenerator(
-            model_name=completions_model_name,
-            sentence_level=sentence_level)
-        self.lm = CompletionsLLM(
-            completions_model_name=completions_model_name)
+            model_name=completions_model_name, sentence_level=sentence_level
+        )
+        self.lm = CompletionsLLM(completions_model_name=completions_model_name)
 
     def register_knowledge_source(
-            self,
-            faiss_index: str,
-            data_db: str,
-            table_name: str,
-            embedding_dimension: int = 1536,
-            max_passage_length: int = 256):
-        '''
+        self,
+        faiss_index: str,
+        data_db: str,
+        table_name: str,
+        embedding_dimension: int = 1536,
+        max_passage_length: int = 256,
+    ):
+        """
         Creates DocDB and Retrieval instances
 
         faiss_index: path to the final IVF index with the all title embeddings (it can be got with create_faiss_index.py)
@@ -50,23 +48,29 @@ class FactScorer:
         table_name: name of the corresponding table  with columns (id, title, text) in the data_db
         embedding_dimension: dimension of the title embeddings
         max_passage_length: max size of data chunks that we create if building the db (in tokens)
-        '''
-        self.db = DocDB(max_passage_length=max_passage_length,
-                        data_db=data_db,
-                        table_name=table_name)
-        self.retrieval = Retrieval(data_db=data_db,
-                                   table_name=table_name,
-                                   embedding_model_name=self.embeddings_model_name,
-                                   faiss_index=faiss_index,
-                                   embed_dimension=embedding_dimension)
+        """
+        self.db = DocDB(
+            max_passage_length=max_passage_length,
+            data_db=data_db,
+            table_name=table_name,
+        )
+        self.retrieval = Retrieval(
+            data_db=data_db,
+            table_name=table_name,
+            embedding_model_name=self.embeddings_model_name,
+            faiss_index=faiss_index,
+            embed_dimension=embedding_dimension,
+        )
 
-    async def get_score(self,
-                        generations: list,
-                        atomic_facts: list = None,
-                        topics: list = None,
-                        k: int = 3,
-                        n: int = 5):
-        '''
+    async def get_score(
+        self,
+        generations: list,
+        atomic_facts: list = None,
+        topics: list = None,
+        k: int = 3,
+        n: int = 5,
+    ):
+        """
         Asynchronously computes the factual for each generation by batches
 
         Args:
@@ -78,13 +82,15 @@ class FactScorer:
 
         Returns:
             out: dict with keys decisions and scores, where
-            - decisions: lists of dicts {atomic_fact, whether it is supported by the RAG-info, char_level span of the fact} 
+            - decisions: lists of dicts {atomic_fact, whether it is supported by the RAG-info, char_level span of the fact}
             for the each generation
             - scores: the factual scores for the generations
-        '''
+        """
         assert isinstance(generations, list), "generations and topics must be lists"
         if atomic_facts is not None:
-            assert len(topics) == len(atomic_facts), "`topics` and `atomic_facts` should have the same length"
+            assert len(topics) == len(
+                atomic_facts
+            ), "`topics` and `atomic_facts` should have the same length"
         else:
             atomic_facts, char_level_spans = [], []
             outputs = await self.af_generator.run(generations)
@@ -95,15 +101,20 @@ class FactScorer:
                 for triplet in facts_triplets:
                     if len(triplet[1]) > 0:
                         generation_atomic_facts.extend(triplet[1])
-                        generation_char_level_spans.update(dict(zip(triplet[1], triplet[2])))
+                        generation_char_level_spans.update(
+                            dict(zip(triplet[1], triplet[2]))
+                        )
                 atomic_facts.append(generation_atomic_facts)
                 char_level_spans.append(generation_char_level_spans)
             assert len(atomic_facts) == len(
-                generations), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
+                generations
+            ), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
 
         scores = []
-        decisions, passages = await self._get_score(atomic_facts, char_level_spans, k=k, n=n, topics=topics)
-        if len(decisions) == 0: 
+        decisions, passages = await self._get_score(
+            atomic_facts, char_level_spans, k=k, n=n, topics=topics
+        )
+        if len(decisions) == 0:
             return {"decisions": [], "scores": [0 for _ in range(len(generations))]}
         for generation_decisions in decisions:
             score = 0
@@ -121,13 +132,15 @@ class FactScorer:
         }
         return out
 
-    async def _get_score(self,
-                         atomic_facts: list[list[str]],
-                         char_level_spans: list[dict],
-                         k: int,
-                         n: int,
-                         topics: list = None) -> tuple[list[list[dict]], list[dict]]:
-        '''
+    async def _get_score(
+        self,
+        atomic_facts: list[list[str]],
+        char_level_spans: list[dict],
+        k: int,
+        n: int,
+        topics: list = None,
+    ) -> tuple[list[list[dict]], list[dict]]:
+        """
         Computes factual scores for batch of generations using completions_lm.generate
 
         Args:
@@ -138,10 +151,10 @@ class FactScorer:
             topics: topics for the each generation
 
         Returns:
-            decisions_by_generation: lists of dicts {atomic_fact, whether it is supported by the RAG-info, char_level span of the fact} 
+            decisions_by_generation: lists of dicts {atomic_fact, whether it is supported by the RAG-info, char_level span of the fact}
             for the each generation
             passages_for_atoms: dict {fact: list of passages for the fact}
-        '''
+        """
         all_facts, all_topics = [], []
         fact_origin = []  # tracks which generation each fact came from
         for gen_idx, facts in enumerate(atomic_facts):
@@ -150,40 +163,42 @@ class FactScorer:
                 all_topics.extend([topics[gen_idx]] * len(facts))
             fact_origin.extend([gen_idx] * len(facts))
 
-        prompts, passages_for_atoms = await self.get_rag_prompts_and_passages(all_facts,
-                                                                              topics=all_topics if topics is not None else None,
-                                                                              k=k, n=n)
+        prompts, passages_for_atoms = await self.get_rag_prompts_and_passages(
+            all_facts, topics=all_topics if topics is not None else None, k=k, n=n
+        )
         if len(prompts) == 0:
-            logger.debug("Could not find RAG-info for generations. Please check your embedding API")
+            logger.debug(
+                "Could not find RAG-info for generations. Please check your embedding API"
+            )
             return [], []
         outputs = await self.lm.generate([p[1] for p in prompts])
         if len(outputs) == 0:
-            logger.debug("Could not evaluate if generations facts are true. Please check your completion API")
+            logger.debug(
+                "Could not evaluate if generations facts are true. Please check your completion API"
+            )
         decisions_by_generation = [[] for _ in range(len(atomic_facts))]
         for i, (output, (fact, _)) in enumerate(zip(outputs, prompts)):
             gen_idx = fact_origin[i]
             char_span = char_level_spans[gen_idx].get(fact, None)
             generated_answer = output.lower()
             if "true" in generated_answer and "false" in generated_answer:
-                is_supported = generated_answer.index("true") > generated_answer.index("false")
+                is_supported = generated_answer.index("true") > generated_answer.index(
+                    "false"
+                )
             elif "true" in generated_answer:
                 is_supported = True
             else:
                 is_supported = False
 
-            decisions_by_generation[gen_idx].append({
-                "atom": fact,
-                "is_supported": is_supported,
-                "span": char_span
-            })
+            decisions_by_generation[gen_idx].append(
+                {"atom": fact, "is_supported": is_supported, "span": char_span}
+            )
         return decisions_by_generation, passages_for_atoms
 
-    async def get_rag_prompts_and_passages(self,
-                                           atomic_facts: list[str],
-                                           k: int,
-                                           n: int,
-                                           topics: list[str] = None):
-        '''
+    async def get_rag_prompts_and_passages(
+        self, atomic_facts: list[str], k: int, n: int, topics: list[str] = None
+    ):
+        """
         Retrieves the appropriate information from the database and makes RAG-prompt for the each fact
 
         Args:
@@ -191,30 +206,40 @@ class FactScorer:
             k: number of articles to find as the closest to the query (topic or fact itself)
             n: number of chunks from the articles to use as the RAG-info
             topics: topics of the facts
-        '''
+        """
         if topics is not None:
-            assert len(topics) == len(atomic_facts), "topics and atomic facts must have the same length"
+            assert len(topics) == len(
+                atomic_facts
+            ), "topics and atomic facts must have the same length"
         prompts = []
-        texts = await self.retrieval.get_texts_for_queries(topics, k) if topics is not None else \
-            await self.retrieval.get_texts_for_queries(atomic_facts, k)
+        texts = (
+            await self.retrieval.get_texts_for_queries(topics, k)
+            if topics is not None
+            else await self.retrieval.get_texts_for_queries(atomic_facts, k)
+        )
         if len(texts) == 0:
             return texts, []
         passages_for_atoms = {}
         for i, atom in enumerate(atomic_facts):
             atom = atom.strip()
             if topics is not None:
-                passages = self.retrieval.get_bm25_passages(topics[i], atom, texts[topics[i]], n=n)
+                passages = self.retrieval.get_bm25_passages(
+                    topics[i], atom, texts[topics[i]], n=n
+                )
                 passages_for_atoms[atom] = passages
                 definition = f"Task: answer the question about {topics[i]} based on the given context.\n\n"
             else:
-                passages = self.retrieval.get_bm25_passages(topics, atom, texts[atom], n=n)
+                passages = self.retrieval.get_bm25_passages(
+                    topics, atom, texts[atom], n=n
+                )
                 passages_for_atoms[atom] = passages
                 definition = "Task: answer the question based on the given context.\n\n"
             context = ""
             for psg in reversed(passages):
-                context += f"Title: {psg["title"]}\nText: {psg["text"]}\n\n".replace("<s>", "").replace("</s>", "")
+                context += f"Title: {psg["title"]}\nText: {psg["text"]}\n\n".replace(
+                    "<s>", ""
+                ).replace("</s>", "")
             definition += context.strip()
             prompt = f"{definition.strip()}\n\nInput: {atom.strip()} True or False? Answer True if the information is supported by the context above and False otherwise.\nOutput:"
             prompts.append((atom, prompt))
         return prompts, passages_for_atoms
-    

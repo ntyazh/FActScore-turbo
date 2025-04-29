@@ -1,0 +1,68 @@
+sentence_level: |
+  Task: Given the following sentence, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
+  Ensure that each statement is self-contained and does not rely on context from other statements. Replace all pronouns (e.g., 'he,' 'she,' 'it,' 'they') with the corresponding nouns or proper names to make the meaning clear without additional context.
+  Do not change anything in the citations.
+  If the passage is inadequate or doesn't contain any information, answer "No facts to extract".
+
+  Example 1:
+  Input Sentence: "Albert Einstein developed the theory of relativity, which revolutionized modern physics."
+  Output:
+  - Albert Einstein developed the theory of relativity [[Albert Einstein developed the theory of relativity]]
+  - The theory of relativity revolutionized modern physics [[the theory of relativity, which revolutionized modern physics]]
+
+  Example 2:
+  Input Sentence: "During World War II, Turing worked for the Government Code and Cypher School at Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence."
+  Output:
+  - Turing worked for the Government Code and Cypher School at Bletchley Park [Turing worked for the Government Code and Cypher School at Bletchley Park]
+  - Bletchley Park was Britain's codebreaking centre [Bletchley Park, Britain's codebreaking centre]
+  - Bletchley Park produced Ultra intelligence [Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence]
+
+  Example 3:
+  Input Sentence: "He was highly influential in the development of theoretical computer science, providing a formalisation of the concepts of algorithm and computation with the Turing machine, which can be considered a model of a general-purpose computer."
+  Output:
+  - He was highly influential in the development of theoretical computer science [[He was highly influential in the development of theoretical computer science]]
+  - He provided a formalisation of the concepts of algorithm and computation with the Turing machine [[providing a formalisation of the concepts of algorithm and computation with the Turing machine]]
+  - The Turing machine can be considered a model of a general-purpose computer [[the Turing machine, which can be considered a model of a general-purpose computer]]
+
+  Example 4:
+  Input Sentence: "<EXAMPLE 1> 
+  <QUESTION>: 
+  <EXAMPLE 2> 
+  <EXAMPLE"
+  Output:
+  - No facts to extract
+
+
+generation_level: |
+  Task: Given the following passage, break it into individual, independent and self-contained facts with exact citations pointing to the relevant portion of the original passage.
+  Ensure that each statement is self-contained and does not rely on context from other statements. Replace all pronouns (e.g., 'he,' 'she,' 'it,' 'they') with the corresponding nouns or proper names to make the meaning clear without additional context.
+  Do not change anything in the citations.
+  Cite ONLY the minimal relevant phrase (no full sentences). 
+  If the passage is inadequate or doesn't contain any information, answer "No facts to extract".
+
+  Example 1:
+  Input Passage: "Turing was highly influential in the development of theoretical computer science, providing a formalisation of the concepts of algorithm and computation with the Turing machine, which can be considered a model of a general-purpose computer. During World War II, Turing worked for the Government Code and Cypher School at Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence. He led Hut 8, the section responsible for German naval cryptanalysis. He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic."
+  Output:
+  - Turing was highly influential in the development of theoretical computer science [[Turing was highly influential in the development of theoretical computer science]]
+  - Turing provided a formalisation of the concepts of algorithm and computation with the Turing machine [[providing a formalisation of the concepts of algorithm and computation with the Turing machine]]
+  - The Turing machine can be considered a model of a general-purpose computer [[the Turing machine, which can be considered a model of a general-purpose computer]]
+  - Turing worked for the Government Code and Cypher School at Bletchley Park [[Turing worked for the Government Code and Cypher School at Bletchley Park]]
+  - Bletchley Park was a Britain's codebreaking centre [[Bletchley Park, Britain's codebreaking centre]]
+  - Bletchley Park produced Ultra intelligence [[Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence]]
+  - Turing led Hut 8 [[He led Hut 8]]
+  - Hut 8 is the section responsible for German naval cryptanalysis [[Hut 8, the section responsible for German naval cryptanalysis]]
+  - Turing played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic. [[He played a crucial role in cracking intercepted messages that enabled the Allies to defeat the Axis powers in many engagements, including the Battle of the Atlantic.]]
+
+  Example 2:
+  Input Passage: "The mutation can be caused by errors during DNA replication, exposure to harmful toxins or radiation, or genetic changes."
+  Output:
+  - The mutation can be caused by errors during DNA replication [[The mutation can be caused by errors during DNA replication]]
+  - The mutation can be caused by exposure to harmful toxins or radiation [[exposure to harmful toxins or radiation]]
+  - The mutation can be caused by genetic changes [[genetic changes]]
+
+  Example 3:
+  Input Passage: "<EXAMPLE 1> 
+  <QUESTION>: 
+  <EXAMPLE 2>"
+  Output:
+  - No facts to extract
