@@ -26,9 +26,6 @@ indexes_dir: path to dir where IVF indexes will be created and merged
 trained_index_name: name of file with trained IVF index in indexes_dir
 """
 
-os.environ["EMBEDDINGS_API_KEY"] = "your api key"
-os.environ["EMBEDDINGS_PROXY"] = "your proxy"
-
 indexes_dir = "path/to/folder/with/indexes/"
 base_url = "https://api.openai.com/v1/embeddings"
 data_db = "/path/to/db"

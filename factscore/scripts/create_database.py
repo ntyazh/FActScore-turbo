@@ -1,5 +1,4 @@
 import json
-import os.path
 import sqlite3
 import time
 
@@ -20,22 +19,20 @@ class DocDB:
         max_passage_length: int = 256,
     ):
         """
-        Creates sqlite3 data db from the json-file of the type {title: text}, if it doesn't exist yet,
-        otherwise just connects to it.
+        Creates sqlite3 data db from the json-file of the type {title: text}, if it doesn't exist yet
         The db has three columns: id, title, text, where text consists of chunks with the number of tokens max_passage_length,
         joined with SPECIAL_SEPARATOR
 
         Args:
-            data_db: path to .db file with columns (id, title, text)
+            data_db: desired path to .db file with columns (id, title, text)
             table_name: name of the corresponding table in the sqlite3 db
-            data_json: path to json-file with data of the format {title: text} (if the db doesn't exist yet)
+            data_json: path to json-file with data of the format {title: text}
             max_passage_length: length of the each chunk (in tokens)
         """
         self.connection = sqlite3.connect(data_db, check_same_thread=False)
         self.data_db = data_db
         self.table_name = table_name
-        if not os.path.exists(data_db):
-            self.build_db(data_json, max_passage_length)
+        self.build_db(data_json, max_passage_length)
 
     def build_db(self, data_path, max_passage_length):
         """
@@ -51,7 +48,7 @@ class DocDB:
 
         titles = set()
         output_lines = []
-        lines_count, start_time = 0, time.time()  # for logging
+        lines_count, start_time = 0, time.time()
         c = self.connection.cursor()
         c.execute(
             f"CREATE TABLE IF NOT EXISTS {self.table_name} (id, title PRIMARY KEY, text)"
@@ -105,16 +102,15 @@ class DocDB:
             )
 
         self.connection.commit()
-        self.check_titles_inserted()
+        print(self.get_all_titles())
         self.connection.close()
 
-    def check_titles_inserted(self):
+    def get_all_titles(self):
         """
-        Prints all titles from the db to verify insertion
+        Returns all titles from the db to verify insertion
         """
         cursor = self.connection.cursor()
         cursor.execute(f"SELECT title FROM {self.table_name}")
         titles = cursor.fetchall()
-        for title in titles:
-            print(title)
         cursor.close()
+        return titles

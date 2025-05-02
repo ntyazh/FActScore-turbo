@@ -2,7 +2,6 @@ from loguru import logger
 
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
-from factscore.database import DocDB
 from factscore.retrieval import Retrieval
 
 
@@ -38,22 +37,15 @@ class FactScorer:
         data_db: str,
         table_name: str,
         embedding_dimension: int = 1536,
-        max_passage_length: int = 256,
     ):
         """
         Creates DocDB and Retrieval instances
 
-        faiss_index: path to the final IVF index with the all title embeddings (it can be got with create_faiss_index.py)
-        data_db: path to .db file with the database
+        faiss_index: path to the  IVF index with the all title embeddings (you can shard it to reduce RAM usage with scripts/create_faiss_index.py)
+        data_db: path to .db file with the database (it can be created with scripts/create_database.py)
         table_name: name of the corresponding table  with columns (id, title, text) in the data_db
         embedding_dimension: dimension of the title embeddings
-        max_passage_length: max size of data chunks that we create if building the db (in tokens)
         """
-        self.db = DocDB(
-            max_passage_length=max_passage_length,
-            data_db=data_db,
-            table_name=table_name,
-        )
         self.retrieval = Retrieval(
             data_db=data_db,
             table_name=table_name,
@@ -86,12 +78,9 @@ class FactScorer:
             for the each generation
             - scores: the factual scores for the generations
         """
-        assert isinstance(generations, list), "generations and topics must be lists"
-        if atomic_facts is not None:
-            assert len(topics) == len(
-                atomic_facts
-            ), "`topics` and `atomic_facts` should have the same length"
-        else:
+        if not isinstance(generations, list):
+            raise TypeError("generations must be a list")
+        if atomic_facts is None:
             atomic_facts, char_level_spans = [], []
             outputs = await self.af_generator.run(generations)
             if len(outputs) == 0:
@@ -106,10 +95,14 @@ class FactScorer:
                         )
                 atomic_facts.append(generation_atomic_facts)
                 char_level_spans.append(generation_char_level_spans)
-            assert len(atomic_facts) == len(
-                generations
-            ), f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
-
+        if len(atomic_facts) != len(generations):
+            raise ValueError(
+                f"atomic facts should have the same length as generations, got: generations {len(generations)}, atomic facts {len(atomic_facts)}"
+            )
+        if topics is not None and len(topics) != len(atomic_facts):
+            raise ValueError(
+                f"atomic facts should have the same length as topics, got: topics {len(topics)}, atomic facts {len(atomic_facts)}"
+            )
         scores = []
         decisions, passages = await self._get_score(
             atomic_facts, char_level_spans, k=k, n=n, topics=topics
@@ -185,11 +178,8 @@ class FactScorer:
                 is_supported = generated_answer.index("true") > generated_answer.index(
                     "false"
                 )
-            elif "true" in generated_answer:
-                is_supported = True
             else:
-                is_supported = False
-
+                is_supported = "true" in generated_answer
             decisions_by_generation[gen_idx].append(
                 {"atom": fact, "is_supported": is_supported, "span": char_span}
             )

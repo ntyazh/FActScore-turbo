@@ -28,22 +28,14 @@ class APIEmbeddingFunction:
         embeds: list of embeddings for the input_texts
         failed_results: list of raised exceptions if the requests were not successful
         """
-        requests = list(
-            map(
-                lambda x: {
-                    "input": x,
-                    "model": self.model_name,
-                    "dimensions": self.dimensions,
-                },
-                input_texts,
-            )
-        )
+        base_params = {"model": self.model_name, "dimensions": self.dimensions}
+        requests = [base_params | {"input": x} for x in input_texts]
         embeds = await process_api_requests_from_list(
             requests,
             os.environ["EMBEDDINGS_BASE_URL"],
             api_key=os.environ["EMBEDDINGS_API_KEY"],
             proxy=(
-                os.environ["EMBEDDINGS_PROXY"]
+                os.environ.get("EMBEDDINGS_PROXY")
                 if os.environ["EMBEDDINGS_PROXY"] != "None"
                 else None
             ),
@@ -65,7 +57,7 @@ class Retrieval:
 
         Args:
             embedding_model_name: model to use to get embeddings (for example, text-embedding-3-small)
-            faiss_index: path to the final IVF index with the all title embeddings (you can get it with create_faiss_index.py)
+            faiss_index: path to the final IVF index with the all title embeddings (you can shard it with create_faiss_index.py)
             data_db: path to the db file with the database
             table_name: name of the table with titles and texts in the database
             embedding_dimension: dimension of the title embedding
@@ -88,28 +80,26 @@ class Retrieval:
             texts: dict {query: texts from the database with the found titles for the query}
             titles: dict {query: the k found titles for the query}
         """
-        assert isinstance(queries, list)
-        embed = await self.ef(queries)
-        if len(embed) == 0:
+        embeds = await self.ef(queries)
+        if len(embeds) == 0:
             return [], []
-        embed = np.array(embed)
-        if len(embed.shape) == 1:
-            embed = np.array(embed).reshape(1, -1)
+        embeds = np.array(embeds)
+        if len(embeds.shape) == 1:
+            embeds = np.array(embeds).reshape(1, -1)
         texts, titles = dict(), dict()
         cursor = self.connection.cursor()
-        distances_queries, ids_queries = self.index.search(np.array(embed), k)
+        distances_queries, ids_queries = self.index.search(np.array(embeds), k)
         for query, ids in zip(queries, ids_queries):
-            cur_query_texts = []
-            cur_query_titles = []
-            for id in ids:
-                cursor.execute(
-                    f"SELECT text, title FROM {self.table_name} WHERE id ="
-                    + (str(id + 1))
-                )
-                id_results = cursor.fetchall()
-                id_texts, id_titles = id_results[0][0], id_results[0][1]
-                cur_query_texts.append(id_texts)
-                cur_query_titles.append(id_titles)
+            cur_query_texts, cur_query_titles = [], []
+            cursor.execute(
+                f"SELECT text, title FROM {self.table_name} "
+                f"WHERE id IN ({','.join([str(id + 1) for id in ids])})",
+            )
+            id_results = [(text, title) for text, title in cursor.fetchall()]
+            for query_pair in id_results:
+                text, title = query_pair
+                cur_query_texts.append(text)
+                cur_query_titles.append(title)
             texts[query] = cur_query_texts
             titles[query] = cur_query_titles
         cursor.close()
@@ -128,7 +118,8 @@ class Retrieval:
         Returns:
             dict {query: list of dicts with keys (title, chunk of the text with this title)}
         """
-        assert isinstance(queries, str) or isinstance(queries, list)
+        if not isinstance(queries, str) and not isinstance(queries, list):
+            raise TypeError("queries must be str or list")
         if isinstance(queries, str):
             queries = [queries]
         texts, titles = await self.search_titles(queries, k)
