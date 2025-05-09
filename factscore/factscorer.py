@@ -121,7 +121,7 @@ class FactScorer:
         out = {
             "decisions": decisions,
             "scores": scores,
-            # "passages": passages,  # for debug, to check that the retrieved from the database passages really contain the appropriate information
+            "passages": passages,  # for debug, to check that the retrieved from the database passages really contain the appropriate information
         }
         return out
 
