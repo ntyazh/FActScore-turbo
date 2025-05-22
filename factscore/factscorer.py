@@ -3,6 +3,7 @@ from loguru import logger
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.retrieval import Retrieval
+from factscore.scripts.create_database import TABLE_NAME
 
 
 class FactScorer:
@@ -35,7 +36,7 @@ class FactScorer:
         self,
         faiss_index: str,
         data_db: str,
-        table_name: str,
+        table_name: str = "documents",
         embedding_dimension: int = 1536,
     ):
         """
@@ -48,7 +49,7 @@ class FactScorer:
         """
         self.retrieval = Retrieval(
             data_db=data_db,
-            table_name=table_name,
+            table_name=TABLE_NAME,
             embedding_model_name=self.embeddings_model_name,
             faiss_index=faiss_index,
             embed_dimension=embedding_dimension,
