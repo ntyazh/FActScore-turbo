@@ -3,7 +3,7 @@ from loguru import logger
 from factscore.atomic_facts import AtomicFactGenerator
 from factscore.completions_llm import CompletionsLLM
 from factscore.retrieval import Retrieval
-from factscore.scripts.create_database import TABLE_NAME
+from scripts.create_database import TABLE_NAME
 
 
 class FactScorer:
