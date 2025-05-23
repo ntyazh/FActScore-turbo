@@ -5,7 +5,7 @@ The repository is an enhanced version of the [original factscore](https://github
 See more about the pipeline details in [``factscorer.py``](https://github.com/ntyazh/factscore/blob/main/factscore/factscorer.py).
 
 **Key improvements:**
-1. the pipeline accelerates fact checking by ~45 times due to asynchronous API queries and batchization.
+1. the pipeline accelerates fact checking by ~6.5 times (with batch size=1) due to asynchronous API queries and batchization. for further acceleration, increase the batch size: for example, with batch_size=128, the pipeline achieves 95.7× speedup.
 2. provides much more reliable, stable and fast search of documents from the database by adding vector sharded FAISS index: matching titles from the database are searched by embedding distances rather than by character-level comparison as in the original.
 3. supports adding arbitrary database.
 4. has a much more user-friendly user interface.
@@ -39,7 +39,7 @@ python3 scripts/create_database.py \
 Please see more in [``scripts/create_database.py``](https://github.com/ntyazh/factscore/blob/main/scripts/create_database.py)
 
 * For existing DBs: ensure the table has three columns: id, title, text.
-If you don't have any DB, you can download a pre-built .db file containing the Wikipedia 2023 dump here:
+* If you don't have any DB, you can download a pre-built .db file containing the Wikipedia 2023 dump here:
 
 3. Create/Use FAISS index with titles embeddings
 
@@ -57,7 +57,7 @@ python3 scripts/shard_faiss_index.py \
 Please see more in [scripts/create_faiss_index.py](https://github.com/ntyazh/factscore/blob/main/scripts/create_faiss_index.py)
 
 * For existing FAISS index: make sure its IDs match the corresponding IDs from the database titles.
-You can download the FAISS index for pre-built Wikipedia 2023 dump from step 2. here:
+* You can download the FAISS index for pre-built Wikipedia 2023 dump from step 2 here:
 
 4. As the pipeline uses Embedding and ChatCompletion API, setup the base urls, API keys and proxies in the corresponding environment variables:
 ```bash
