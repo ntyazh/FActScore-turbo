@@ -39,7 +39,7 @@ python3 scripts/create_database.py \
 Please see more in [``scripts/create_database.py``](https://github.com/ntyazh/factscore/blob/main/scripts/create_database.py)
 
 * For existing DBs: ensure the table has three columns: id, title, text.
-* If you don't have any DB, you can download a pre-built .db file containing the Wikipedia 2023 dump here:
+* If you don't have any DB, you can download a pre-built .db file containing the Wikipedia 2023 dump [here](https://disk.yandex.ru/d/vLpW5eGZ4bXfbQ).
 
 3. Create/Use FAISS index with titles embeddings
 
@@ -57,7 +57,7 @@ python3 scripts/shard_faiss_index.py \
 Please see more in [scripts/create_faiss_index.py](https://github.com/ntyazh/factscore/blob/main/scripts/create_faiss_index.py)
 
 * For existing FAISS index: make sure its IDs match the corresponding IDs from the database titles.
-* You can download the FAISS index for pre-built Wikipedia 2023 dump from step 2 here:
+* You can download the FAISS index for pre-built Wikipedia 2023 dump from step 2 [here](https://disk.yandex.ru/d/snh1-bBLbifsqQ).
 
 4. As the pipeline uses Embedding and ChatCompletion API, setup the base urls, API keys and proxies in the corresponding environment variables:
 ```bash
